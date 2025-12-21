@@ -20,6 +20,7 @@
 - JSON 配置（兼容）：macOS `~/Library/Application Support/proxycast/config.json`，Linux `~/.config/proxycast/config.json`，Windows `%APPDATA%\\proxycast\\config.json`
 - 旧版遗留路径：`~/.proxycast/config.json`（检测到会提示手动迁移）
 - 两者都不存在时使用默认配置。
+  - 首次启动会自动生成强随机 API Key 并写入配置。
 
 ## 数据与日志位置
 
@@ -28,25 +29,36 @@
 - OAuth/Token 目录（默认）：`~/.proxycast/auth/`
 - 日志目录：`~/.proxycast/logs/`
 - 请求日志目录：`~/.proxycast/request_logs/`
+- 数据库备份目录：`~/.proxycast/backups/`
 
 ## 备份与恢复
 
 ### 备份
 
-1. 停止 ProxyCast 服务。
-2. 复制以下路径：
+1. 可使用管理端点触发备份（需配置管理密钥）：
+   - `POST /v0/management/backup`
+2. 或手动备份（建议停服后执行）：
+   - 复制以下路径：
    - 配置文件（macOS: `~/Library/Application Support/proxycast/config.yaml`，Linux: `~/.config/proxycast/config.yaml`，Windows: `%APPDATA%\\proxycast\\config.yaml`）
+   - 配置备份文件：`config.yaml.backup`
    - 凭证池副本目录（macOS: `~/Library/Application Support/proxycast/credentials/`，Linux: `~/.local/share/proxycast/credentials/`，Windows: `%APPDATA%\\proxycast\\credentials\\`）
    - `~/.proxycast/proxycast.db`
    - `~/.proxycast/auth/`（如需要保留 OAuth/Token）
    - `~/.proxycast/logs/`、`~/.proxycast/request_logs/`（如需保留日志）
 3. 将备份文件存入受控存储（加密磁盘或安全存储）。
 
+### 自动备份
+
+- 服务运行期间每 24 小时自动创建数据库备份到 `~/.proxycast/backups/`。
+- 备份默认保留 7 天，过期文件会被清理。
+
 ### 恢复
 
 1. 停止 ProxyCast 服务。
-2. 恢复上述文件到原路径。
-3. 启动服务并检查 `/health`。
+2. 使用管理端点恢复（建议停服后执行，执行时会锁定数据库并短暂阻塞请求）：
+   - `POST /v0/management/restore`，请求体：`{"backup_path": "/path/to/proxycast_YYYYMMDD_HHMMSS.db"}`
+3. 或手动恢复上述文件到原路径。
+4. 启动服务并检查 `/health` 与 `/ready`。
 
 ## 升级与回滚
 
@@ -58,6 +70,7 @@
 ## 运行与排障
 
 - 健康检查：`GET /health`
+- 就绪检查：`GET /ready`
 - 常见问题排查：
   - 端口占用：修改配置端口或释放占用端口。
   - 配置解析失败：检查 YAML/JSON 语法，确认缩进正确。
