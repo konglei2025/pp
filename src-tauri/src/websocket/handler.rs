@@ -126,6 +126,22 @@ async fn handle_socket(socket: WebSocket, state: WsHandlerState, client_info: Op
     while let Some(msg) = receiver.next().await {
         match msg {
             Ok(Message::Text(text)) => {
+                // P1 安全修复：限制消息大小防止 DoS
+                const MAX_MESSAGE_SIZE: usize = 10 * 1024 * 1024; // 10MB
+                if text.len() > MAX_MESSAGE_SIZE {
+                    state.manager.on_error();
+                    let error = WsMessage::Error(WsError::invalid_message(format!(
+                        "Message too large: {} bytes (max: {} bytes)",
+                        text.len(),
+                        MAX_MESSAGE_SIZE
+                    )));
+                    let error_text = serde_json::to_string(&error).unwrap_or_default();
+                    if sender.send(Message::Text(error_text.into())).await.is_err() {
+                        break;
+                    }
+                    continue;
+                }
+
                 state.manager.on_message();
                 state.manager.increment_request_count(&conn_id);
 
@@ -229,6 +245,21 @@ async fn handle_message(
         WsMessage::Error(_) => {
             // 忽略客户端发送的错误消息
             None
+        }
+        WsMessage::SubscribeFlowEvents | WsMessage::UnsubscribeFlowEvents => {
+            // Flow 事件订阅在 server/handlers/websocket.rs 中处理
+            // 这里的 handler 是旧的实现，暂时返回不支持的错误
+            Some(WsMessage::Error(WsError::invalid_request(
+                None,
+                "Flow event subscription is not supported in this handler",
+            )))
+        }
+        WsMessage::FlowEvent(_) => {
+            // 客户端不应发送 FlowEvent 消息
+            Some(WsMessage::Error(WsError::invalid_request(
+                None,
+                "FlowEvent messages are server-to-client only",
+            )))
         }
     }
 }

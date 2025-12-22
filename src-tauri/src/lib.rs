@@ -3,6 +3,7 @@ mod config;
 mod converter;
 pub mod credential;
 mod database;
+pub mod flow_monitor;
 pub mod injection;
 mod logger;
 pub mod middleware;
@@ -16,6 +17,7 @@ pub mod router;
 mod server;
 mod server_utils;
 mod services;
+pub mod streaming;
 pub mod telemetry;
 pub mod tray;
 pub mod websocket;
@@ -25,11 +27,21 @@ use std::sync::Arc;
 use tauri::{Manager, Runtime};
 use tokio::sync::RwLock;
 
+use commands::flow_monitor_cmd::{
+    BatchOperationsState, BookmarkManagerState, EnhancedStatsServiceState, FlowInterceptorState,
+    FlowMonitorState, FlowQueryServiceState, FlowReplayerState, QuickFilterManagerState,
+    SessionManagerState,
+};
 use commands::plugin_cmd::PluginManagerState;
 use commands::provider_pool_cmd::{CredentialSyncServiceState, ProviderPoolServiceState};
 use commands::resilience_cmd::ResilienceConfigState;
 use commands::router_cmd::RouterConfigState;
 use commands::skill_cmd::SkillServiceState;
+use flow_monitor::{
+    BatchOperations, BookmarkManager, EnhancedStatsService, FlowFileStore, FlowInterceptor,
+    FlowMonitor, FlowMonitorConfig, FlowQueryService, FlowReplayer, InterceptConfig,
+    QuickFilterManager, SessionManager,
+};
 use services::provider_pool_service::ProviderPoolService;
 use services::skill_service::SkillService;
 use services::token_cache_service::TokenCacheService;
@@ -188,6 +200,10 @@ mod tests {
 pub type AppState = Arc<RwLock<server::ServerState>>;
 pub type LogState = Arc<RwLock<logger::LogStore>>;
 
+fn generate_api_key() -> String {
+    config::generate_secure_api_key()
+}
+
 #[tauri::command]
 async fn start_server(
     state: tauri::State<'_, AppState>,
@@ -246,6 +262,20 @@ async fn save_config(
     state: tauri::State<'_, AppState>,
     config: config::Config,
 ) -> Result<(), String> {
+    // P0 安全修复：禁止危险的网络配置
+    let host = config.server.host.to_lowercase();
+    if host == "0.0.0.0" || host == "::" {
+        return Err(
+            "安全限制：不允许监听所有网络接口 (0.0.0.0 或 ::)。请使用 127.0.0.1 或 localhost"
+                .to_string(),
+        );
+    }
+
+    // 禁止开启远程管理
+    if config.remote_management.allow_remote {
+        return Err("安全限制：不允许开启远程管理功能".to_string());
+    }
+
     let mut s = state.write().await;
     s.config = config.clone();
     config::save_config(&config).map_err(|e| e.to_string())
@@ -365,31 +395,32 @@ async fn get_env_variables(state: tauri::State<'_, AppState>) -> Result<Vec<EnvV
     let creds = &s.kiro_provider.credentials;
     let mut vars = Vec::new();
 
+    // P0 安全修复：不再返回明文敏感凭证，仅返回 masked 版本
     if let Some(token) = &creds.access_token {
         vars.push(EnvVariable {
             key: "KIRO_ACCESS_TOKEN".to_string(),
-            value: token.clone(),
+            value: String::new(), // 不返回明文
             masked: mask_token(token),
         });
     }
     if let Some(token) = &creds.refresh_token {
         vars.push(EnvVariable {
             key: "KIRO_REFRESH_TOKEN".to_string(),
-            value: token.clone(),
+            value: String::new(), // 不返回明文
             masked: mask_token(token),
         });
     }
     if let Some(id) = &creds.client_id {
         vars.push(EnvVariable {
             key: "KIRO_CLIENT_ID".to_string(),
-            value: id.clone(),
+            value: String::new(), // 不返回明文
             masked: mask_token(id),
         });
     }
     if let Some(secret) = &creds.client_secret {
         vars.push(EnvVariable {
             key: "KIRO_CLIENT_SECRET".to_string(),
-            value: secret.clone(),
+            value: String::new(), // 不返回明文
             masked: mask_token(secret),
         });
     }
@@ -1363,12 +1394,57 @@ async fn test_api(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let config = config::load_config().unwrap_or_default();
-    let state: AppState = Arc::new(RwLock::new(server::ServerState::new(config)));
-    let logs: LogState = Arc::new(RwLock::new(logger::LogStore::new()));
+    let mut config = match config::load_config() {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            tracing::error!("配置加载失败，已中止启动: {}", err);
+            eprintln!("配置加载失败，已中止启动: {}", err);
+            return;
+        }
+    };
+    if config.server.api_key == config::DEFAULT_API_KEY {
+        let new_key = generate_api_key();
+        config.server.api_key = new_key.clone();
+        if let Err(err) = config::save_config(&config) {
+            tracing::error!("自动生成 API key 失败，无法保存配置，已中止启动: {}", err);
+            eprintln!("自动生成 API key 失败，无法保存配置，已中止启动: {}", err);
+            return;
+        }
+        tracing::info!("检测到默认 API key，已自动生成并保存新密钥");
+        eprintln!("检测到默认 API key，已自动生成并保存新密钥");
+    }
+    if !is_loopback_host(&config.server.host) {
+        tracing::error!("当前版本仅支持本地监听，请使用 127.0.0.1/localhost/::1。");
+        eprintln!("当前版本仅支持本地监听，请使用 127.0.0.1/localhost/::1。");
+        return;
+    }
+    if config.server.api_key == config::DEFAULT_API_KEY {
+        tracing::error!("检测到使用默认 API key，已中止启动。请配置强密钥。");
+        eprintln!("检测到使用默认 API key，已中止启动。请配置强密钥。");
+        return;
+    }
+    if config.server.tls.enable {
+        tracing::error!("检测到 TLS 配置已启用，但当前版本尚未支持 TLS，已中止启动。");
+        eprintln!("检测到 TLS 配置已启用，但当前版本尚未支持 TLS，已中止启动。");
+        return;
+    }
+    if config.remote_management.allow_remote {
+        tracing::error!("检测到远程管理已开启，但当前版本未启用 TLS，已中止启动。");
+        eprintln!("检测到远程管理已开启，但当前版本未启用 TLS，已中止启动。");
+        return;
+    }
+    let state: AppState = Arc::new(RwLock::new(server::ServerState::new(config.clone())));
+    let logs: LogState = Arc::new(RwLock::new(logger::LogStore::with_config(&config.logging)));
 
     // Initialize database for Switch functionality
-    let db = database::init_database().expect("Failed to initialize database");
+    let db = match database::init_database() {
+        Ok(conn) => conn,
+        Err(err) => {
+            tracing::error!("数据库初始化失败，已中止启动: {}", err);
+            eprintln!("数据库初始化失败，已中止启动: {}", err);
+            return;
+        }
+    };
 
     // Initialize SkillService
     let skill_service = SkillService::new().expect("Failed to initialize SkillService");
@@ -1405,8 +1481,14 @@ pub fn run() {
     let shared_tokens = Arc::new(parking_lot::RwLock::new(
         telemetry::TokenTracker::with_defaults(),
     ));
+    let log_rotation = telemetry::LogRotationConfig {
+        max_memory_logs: 10000,
+        retention_days: config.logging.retention_days,
+        max_file_size: 10 * 1024 * 1024,
+        enable_file_logging: config.logging.enabled,
+    };
     let shared_logger = Arc::new(
-        telemetry::RequestLogger::with_defaults().expect("Failed to create RequestLogger"),
+        telemetry::RequestLogger::new(log_rotation).expect("Failed to create RequestLogger"),
     );
 
     // Initialize TelemetryState with shared instances
@@ -1416,6 +1498,91 @@ pub fn run() {
         Some(shared_logger.clone()),
     )
     .expect("Failed to create TelemetryState");
+
+    // Initialize FlowMonitor and FlowQueryService
+    let flow_monitor_config = FlowMonitorConfig::default();
+    let flow_file_store = {
+        // 获取应用数据目录
+        let data_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("proxycast")
+            .join("flows");
+
+        // 创建目录（如果不存在）
+        if let Err(e) = std::fs::create_dir_all(&data_dir) {
+            tracing::warn!("无法创建 Flow 存储目录: {}", e);
+        }
+
+        let rotation_config = flow_monitor::RotationConfig::default();
+        match FlowFileStore::new(data_dir, rotation_config) {
+            Ok(store) => Some(Arc::new(store)),
+            Err(e) => {
+                tracing::warn!("无法初始化 Flow 文件存储: {}", e);
+                None
+            }
+        }
+    };
+    let flow_monitor = Arc::new(FlowMonitor::new(
+        flow_monitor_config,
+        flow_file_store.clone(),
+    ));
+    let flow_monitor_state = FlowMonitorState(flow_monitor.clone());
+
+    // 初始化 Flow 拦截器
+    let flow_interceptor = Arc::new(FlowInterceptor::new(InterceptConfig::default()));
+    let flow_interceptor_state = FlowInterceptorState(flow_interceptor.clone());
+
+    // 初始化 Flow 重放器
+    let flow_replayer = Arc::new(FlowReplayer::new(
+        flow_monitor.clone(),
+        provider_pool_service_state.0.clone(),
+        db.clone(),
+    ));
+    let flow_replayer_state = FlowReplayerState(flow_replayer);
+
+    // 初始化会话管理器
+    let db_path = database::get_db_path();
+    let session_manager =
+        Arc::new(SessionManager::new(db_path.clone()).expect("Failed to create SessionManager"));
+    let session_manager_state = SessionManagerState(session_manager);
+
+    // 初始化快速过滤器管理器
+    let quick_filter_manager = Arc::new(
+        QuickFilterManager::new(db_path.clone()).expect("Failed to create QuickFilterManager"),
+    );
+    let quick_filter_manager_state = QuickFilterManagerState(quick_filter_manager);
+
+    // 初始化书签管理器
+    let bookmark_manager =
+        Arc::new(BookmarkManager::new(db_path).expect("Failed to create BookmarkManager"));
+    let bookmark_manager_state = BookmarkManagerState(bookmark_manager);
+
+    // 初始化增强统计服务
+    let enhanced_stats_service = Arc::new(EnhancedStatsService::new(flow_monitor.memory_store()));
+    let enhanced_stats_service_state = EnhancedStatsServiceState(enhanced_stats_service);
+
+    // 初始化批量操作服务
+    let batch_operations = Arc::new(BatchOperations::new(
+        flow_monitor.clone(),
+        Some(session_manager_state.0.clone()),
+    ));
+    let batch_operations_state = BatchOperationsState(batch_operations);
+
+    // FlowQueryService 需要 file_store，如果没有则创建一个临时的
+    let flow_query_service_state = if let Some(file_store) = flow_file_store {
+        let query_service = FlowQueryService::new(flow_monitor.memory_store(), file_store);
+        FlowQueryServiceState(Arc::new(query_service))
+    } else {
+        // 如果没有文件存储，创建一个临时的内存存储
+        let temp_dir = std::env::temp_dir().join("proxycast_flows");
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let rotation_config = flow_monitor::RotationConfig::default();
+        let temp_store = FlowFileStore::new(temp_dir, rotation_config)
+            .expect("Failed to create temp FlowFileStore");
+        let query_service =
+            FlowQueryService::new(flow_monitor.memory_store(), Arc::new(temp_store));
+        FlowQueryServiceState(Arc::new(query_service))
+    };
 
     // Initialize default skill repos
     {
@@ -1433,6 +1600,8 @@ pub fn run() {
     let shared_stats_clone = shared_stats.clone();
     let shared_tokens_clone = shared_tokens.clone();
     let shared_logger_clone = shared_logger.clone();
+    let flow_monitor_clone = flow_monitor.clone();
+    let flow_interceptor_clone = flow_interceptor.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -1452,6 +1621,15 @@ pub fn run() {
         .manage(resilience_config_state)
         .manage(telemetry_state)
         .manage(plugin_manager_state)
+        .manage(flow_monitor_state)
+        .manage(flow_query_service_state)
+        .manage(flow_interceptor_state)
+        .manage(flow_replayer_state)
+        .manage(session_manager_state)
+        .manage(quick_filter_manager_state)
+        .manage(bookmark_manager_state)
+        .manage(enhanced_stats_service_state)
+        .manage(batch_operations_state)
         .setup(move |app| {
             // 初始化托盘管理器
             // Requirements 1.4: 应用启动时显示停止状态图标
@@ -1480,6 +1658,7 @@ pub fn run() {
             let shared_stats = shared_stats_clone.clone();
             let shared_tokens = shared_tokens_clone.clone();
             let shared_logger = shared_logger_clone.clone();
+            let shared_flow_monitor = flow_monitor_clone.clone();
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 // 先加载凭证
@@ -1493,7 +1672,7 @@ pub fn run() {
                         logs.write().await.add("info", "[启动] Kiro 凭证已加载");
                     }
                 }
-                // 启动服务器（使用共享的遥测实例）
+                // 启动服务器（使用共享的遥测实例和 Flow Monitor）
                 let server_started;
                 let server_address;
                 {
@@ -1502,7 +1681,7 @@ pub fn run() {
                         .await
                         .add("info", "[启动] 正在自动启动服务器...");
                     match s
-                        .start_with_telemetry(
+                        .start_with_telemetry_and_flow_monitor(
                             logs.clone(),
                             pool_service,
                             token_cache,
@@ -1510,6 +1689,8 @@ pub fn run() {
                             Some(shared_stats),
                             Some(shared_tokens),
                             Some(shared_logger),
+                            Some(shared_flow_monitor),
+                            Some(flow_interceptor_clone),
                         )
                         .await
                     {
@@ -1779,7 +1960,138 @@ pub fn run() {
             commands::plugin_cmd::reload_plugins,
             commands::plugin_cmd::unload_plugin,
             commands::plugin_cmd::get_plugins_dir,
+            // Flow Monitor commands
+            commands::flow_monitor_cmd::query_flows,
+            commands::flow_monitor_cmd::get_flow_detail,
+            commands::flow_monitor_cmd::search_flows,
+            commands::flow_monitor_cmd::get_flow_stats,
+            commands::flow_monitor_cmd::export_flows,
+            commands::flow_monitor_cmd::update_flow_annotations,
+            commands::flow_monitor_cmd::toggle_flow_starred,
+            commands::flow_monitor_cmd::add_flow_comment,
+            commands::flow_monitor_cmd::add_flow_tag,
+            commands::flow_monitor_cmd::remove_flow_tag,
+            commands::flow_monitor_cmd::set_flow_marker,
+            commands::flow_monitor_cmd::cleanup_flows,
+            commands::flow_monitor_cmd::get_recent_flows,
+            commands::flow_monitor_cmd::get_flow_monitor_status,
+            commands::flow_monitor_cmd::get_flow_monitor_debug_info,
+            commands::flow_monitor_cmd::create_test_flows,
+            commands::flow_monitor_cmd::enable_flow_monitor,
+            commands::flow_monitor_cmd::disable_flow_monitor,
+            commands::flow_monitor_cmd::subscribe_flow_events,
+            commands::flow_monitor_cmd::get_all_flow_tags,
+            // Flow Monitor filter expression commands
+            commands::flow_monitor_cmd::parse_filter,
+            commands::flow_monitor_cmd::validate_filter,
+            commands::flow_monitor_cmd::get_filter_help_items,
+            commands::flow_monitor_cmd::get_filter_help_text,
+            commands::flow_monitor_cmd::query_flows_with_expression,
+            // Flow Interceptor commands
+            commands::flow_monitor_cmd::intercept_config_get,
+            commands::flow_monitor_cmd::intercept_config_set,
+            commands::flow_monitor_cmd::intercept_continue,
+            commands::flow_monitor_cmd::intercept_cancel,
+            commands::flow_monitor_cmd::intercept_get_flow,
+            commands::flow_monitor_cmd::intercept_list_flows,
+            commands::flow_monitor_cmd::intercept_count,
+            commands::flow_monitor_cmd::intercept_is_enabled,
+            commands::flow_monitor_cmd::intercept_enable,
+            commands::flow_monitor_cmd::intercept_disable,
+            commands::flow_monitor_cmd::intercept_set_editing,
+            commands::flow_monitor_cmd::subscribe_intercept_events,
+            // Flow Monitor realtime enhancement commands
+            commands::flow_monitor_cmd::get_threshold_config,
+            commands::flow_monitor_cmd::update_threshold_config,
+            commands::flow_monitor_cmd::get_request_rate,
+            commands::flow_monitor_cmd::set_rate_window,
+            // Flow Replayer commands
+            commands::flow_monitor_cmd::replay_flow,
+            commands::flow_monitor_cmd::replay_flows_batch,
+            // Flow Diff commands
+            commands::flow_monitor_cmd::diff_flows,
+            // Session Management commands
+            commands::flow_monitor_cmd::create_session,
+            commands::flow_monitor_cmd::get_session,
+            commands::flow_monitor_cmd::list_sessions,
+            commands::flow_monitor_cmd::add_flow_to_session,
+            commands::flow_monitor_cmd::remove_flow_from_session,
+            commands::flow_monitor_cmd::update_session,
+            commands::flow_monitor_cmd::archive_session,
+            commands::flow_monitor_cmd::unarchive_session,
+            commands::flow_monitor_cmd::delete_session,
+            commands::flow_monitor_cmd::export_session,
+            commands::flow_monitor_cmd::get_session_flow_count,
+            commands::flow_monitor_cmd::is_flow_in_session,
+            commands::flow_monitor_cmd::get_sessions_for_flow,
+            commands::flow_monitor_cmd::get_auto_session_config,
+            commands::flow_monitor_cmd::set_auto_session_config,
+            commands::flow_monitor_cmd::register_active_session,
+            // Quick Filter commands
+            commands::flow_monitor_cmd::save_quick_filter,
+            commands::flow_monitor_cmd::get_quick_filter,
+            commands::flow_monitor_cmd::update_quick_filter,
+            commands::flow_monitor_cmd::delete_quick_filter,
+            commands::flow_monitor_cmd::list_quick_filters,
+            commands::flow_monitor_cmd::list_quick_filters_by_group,
+            commands::flow_monitor_cmd::list_quick_filter_groups,
+            commands::flow_monitor_cmd::export_quick_filters,
+            commands::flow_monitor_cmd::import_quick_filters,
+            commands::flow_monitor_cmd::find_quick_filter_by_name,
+            // Code Export commands
+            commands::flow_monitor_cmd::export_flow_as_code,
+            commands::flow_monitor_cmd::export_flows_as_code,
+            commands::flow_monitor_cmd::get_code_export_formats,
+            // Bookmark Management commands
+            commands::flow_monitor_cmd::add_bookmark,
+            commands::flow_monitor_cmd::get_bookmark,
+            commands::flow_monitor_cmd::get_bookmark_by_flow_id,
+            commands::flow_monitor_cmd::remove_bookmark,
+            commands::flow_monitor_cmd::remove_bookmark_by_flow_id,
+            commands::flow_monitor_cmd::update_bookmark,
+            commands::flow_monitor_cmd::list_bookmarks,
+            commands::flow_monitor_cmd::list_bookmark_groups,
+            commands::flow_monitor_cmd::is_flow_bookmarked,
+            commands::flow_monitor_cmd::get_bookmark_count,
+            commands::flow_monitor_cmd::export_bookmarks,
+            commands::flow_monitor_cmd::import_bookmarks,
+            commands::flow_monitor_cmd::toggle_bookmark,
+            // Enhanced Stats commands
+            commands::flow_monitor_cmd::get_enhanced_stats,
+            commands::flow_monitor_cmd::get_request_trend,
+            commands::flow_monitor_cmd::get_token_distribution,
+            commands::flow_monitor_cmd::get_latency_histogram,
+            commands::flow_monitor_cmd::export_stats_report,
+            // Batch Operations commands
+            commands::flow_monitor_cmd::batch_star_flows,
+            commands::flow_monitor_cmd::batch_unstar_flows,
+            commands::flow_monitor_cmd::batch_add_tags,
+            commands::flow_monitor_cmd::batch_remove_tags,
+            commands::flow_monitor_cmd::batch_export_flows,
+            commands::flow_monitor_cmd::batch_delete_flows,
+            commands::flow_monitor_cmd::batch_add_to_session,
+            // Window control commands
+            commands::window_cmd::get_window_size,
+            commands::window_cmd::set_window_size,
+            commands::window_cmd::resize_for_flow_monitor,
+            commands::window_cmd::restore_window_size,
+            commands::window_cmd::toggle_window_size,
+            commands::window_cmd::center_window,
+            commands::window_cmd::get_window_size_options,
+            commands::window_cmd::set_window_size_by_option,
+            commands::window_cmd::toggle_fullscreen,
+            commands::window_cmd::is_fullscreen,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    if host == "localhost" {
+        return true;
+    }
+    match host.parse::<std::net::IpAddr>() {
+        Ok(addr) => addr.is_loopback(),
+        Err(_) => false,
+    }
 }
