@@ -635,6 +635,32 @@ export async function getKiroCredentialFingerprint(
   return invoke("get_kiro_credential_fingerprint", { uuid });
 }
 
+// 切换到本地的结果
+export interface SwitchToLocalResult {
+  /** 是否成功 */
+  success: boolean;
+  /** 结果消息 */
+  message: string;
+  /** 是否需要用户操作（如需管理员权限） */
+  requires_action: boolean;
+  /** 切换的 Machine ID */
+  machine_id?: string;
+  /** 是否需要重启 Kiro IDE */
+  requires_kiro_restart: boolean;
+}
+
+// 切换 Kiro 凭证到本地
+export async function switchKiroToLocal(
+  uuid: string,
+): Promise<SwitchToLocalResult> {
+  return invoke("switch_kiro_to_local", { uuid });
+}
+
+// 获取当前本地使用的 Kiro 凭证 UUID
+export async function getLocalKiroCredentialUuid(): Promise<string | null> {
+  return invoke("get_local_kiro_credential_uuid");
+}
+
 // ============ Kiro 凭证池管理 HTTP API ============
 
 /** 可用凭证信息 */

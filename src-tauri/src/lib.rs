@@ -2339,6 +2339,10 @@ pub fn run() {
             commands::machine_id_cmd::copy_machine_id_to_clipboard,
             commands::machine_id_cmd::paste_machine_id_from_clipboard,
             commands::machine_id_cmd::get_system_info,
+            // Kiro Local commands
+            commands::kiro_local::switch_kiro_to_local,
+            commands::kiro_local::get_kiro_fingerprint_info,
+            commands::kiro_local::get_local_kiro_credential_uuid,
             // Network commands
             commands::network_cmd::get_network_info,
         ])

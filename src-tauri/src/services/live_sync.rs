@@ -1,10 +1,16 @@
 use crate::models::{AppType, Provider};
 use serde_json::{json, Value};
+use std::fs;
+use std::io::{Read, Write};
 use std::path::PathBuf;
+
+/// ProxyCast 管理的环境变量块标记
+const ENV_BLOCK_START: &str = "# >>> ProxyCast Claude Config >>>";
+const ENV_BLOCK_END: &str = "# <<< ProxyCast Claude Config <<<";
 
 /// 原子写入 JSON 文件，防止配置损坏
 /// 参考 cc-switch 的实现：使用临时文件 + 重命名的原子操作
-fn write_json_file_atomic(
+pub(crate) fn write_json_file_atomic(
     path: &std::path::Path,
     value: &Value,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -38,13 +44,170 @@ fn write_json_file_atomic(
 }
 
 /// 创建配置文件的备份
-fn create_backup(path: &std::path::Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub(crate) fn create_backup(
+    path: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if path.exists() {
         let backup_path = path.with_extension("bak");
         std::fs::copy(path, &backup_path)?;
         tracing::info!("Created backup: {}", backup_path.display());
     }
     Ok(())
+}
+
+/// 获取当前 shell 配置文件路径
+/// 优先级：zsh > bash
+fn get_shell_config_path() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
+
+    // 检查 SHELL 环境变量
+    if let Ok(shell) = std::env::var("SHELL") {
+        if shell.contains("zsh") {
+            let zshrc = home.join(".zshrc");
+            return Ok(zshrc);
+        } else if shell.contains("bash") {
+            let bashrc = home.join(".bashrc");
+            return Ok(bashrc);
+        }
+    }
+
+    // 默认检查文件是否存在
+    let zshrc = home.join(".zshrc");
+    if zshrc.exists() {
+        return Ok(zshrc);
+    }
+
+    let bashrc = home.join(".bashrc");
+    if bashrc.exists() {
+        return Ok(bashrc);
+    }
+
+    // 如果都不存在，默认使用 .zshrc（macOS 默认）
+    Ok(zshrc)
+}
+
+/// 将环境变量写入 shell 配置文件
+/// 使用标记块管理，避免重复添加
+pub(crate) fn write_env_to_shell_config(
+    env_vars: &[(String, String)],
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config_path = get_shell_config_path()?;
+
+    tracing::info!(
+        "Writing environment variables to: {}",
+        config_path.display()
+    );
+
+    // 读取现有配置
+    let existing_content = if config_path.exists() {
+        fs::read_to_string(&config_path)?
+    } else {
+        String::new()
+    };
+
+    // 移除旧的 ProxyCast 配置块
+    let mut new_content = String::new();
+    let mut in_proxycast_block = false;
+
+    for line in existing_content.lines() {
+        if line.trim() == ENV_BLOCK_START {
+            in_proxycast_block = true;
+            continue;
+        }
+        if line.trim() == ENV_BLOCK_END {
+            in_proxycast_block = false;
+            continue;
+        }
+        if !in_proxycast_block {
+            new_content.push_str(line);
+            new_content.push('\n');
+        }
+    }
+
+    // 添加新的 ProxyCast 配置块
+    if !env_vars.is_empty() {
+        // 确保前面有空行
+        if !new_content.ends_with("\n\n") && !new_content.is_empty() {
+            new_content.push('\n');
+        }
+
+        new_content.push_str(ENV_BLOCK_START);
+        new_content.push('\n');
+        new_content.push_str("# ProxyCast managed Claude Code configuration\n");
+        new_content.push_str("# Do not edit this block manually\n");
+
+        for (key, value) in env_vars {
+            // 转义值中的特殊字符
+            let escaped_value = value.replace('\\', "\\\\").replace('"', "\\\"");
+            new_content.push_str(&format!("export {}=\"{}\"\n", key, escaped_value));
+        }
+
+        new_content.push_str(ENV_BLOCK_END);
+        new_content.push('\n');
+    }
+
+    // 创建备份
+    create_backup(&config_path)?;
+
+    // 写入文件
+    let mut file = fs::File::create(&config_path)?;
+    file.write_all(new_content.as_bytes())?;
+    file.flush()?;
+
+    tracing::info!(
+        "Successfully updated shell config: {}",
+        config_path.display()
+    );
+    Ok(())
+}
+
+/// 从 shell 配置文件读取 ProxyCast 管理的环境变量
+fn read_env_from_shell_config(
+) -> Result<Vec<(String, String)>, Box<dyn std::error::Error + Send + Sync>> {
+    let config_path = get_shell_config_path()?;
+
+    if !config_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let content = fs::read_to_string(&config_path)?;
+    let mut env_vars = Vec::new();
+    let mut in_proxycast_block = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed == ENV_BLOCK_START {
+            in_proxycast_block = true;
+            continue;
+        }
+        if trimmed == ENV_BLOCK_END {
+            in_proxycast_block = false;
+            continue;
+        }
+
+        if in_proxycast_block && trimmed.starts_with("export ") {
+            // 解析 export KEY="VALUE" 格式
+            let export_line = trimmed.strip_prefix("export ").unwrap_or(trimmed);
+            if let Some(eq_pos) = export_line.find('=') {
+                let key = export_line[..eq_pos].trim().to_string();
+                let value_part = export_line[eq_pos + 1..].trim();
+
+                // 移除引号
+                let value = if (value_part.starts_with('"') && value_part.ends_with('"'))
+                    || (value_part.starts_with('\'') && value_part.ends_with('\''))
+                {
+                    value_part[1..value_part.len() - 1].to_string()
+                } else {
+                    value_part.to_string()
+                };
+
+                env_vars.push((key, value));
+            }
+        }
+    }
+
+    Ok(env_vars)
 }
 
 /// Get the configuration file path for an app type
@@ -78,7 +241,7 @@ pub fn sync_to_live(
 /// 此函数确保只保留一个认证变量：
 /// - 优先保留 ANTHROPIC_AUTH_TOKEN（OAuth token）
 /// - 如果只有 ANTHROPIC_API_KEY，则保留它
-fn clean_claude_auth_conflict(settings: &mut Value) {
+pub(crate) fn clean_claude_auth_conflict(settings: &mut Value) {
     if let Some(env) = settings.get_mut("env").and_then(|v| v.as_object_mut()) {
         let has_auth_token = env
             .get("ANTHROPIC_AUTH_TOKEN")
@@ -158,13 +321,37 @@ fn sync_claude_settings(
         tracing::debug!("使用完整配置对象");
     }
 
-    // 清理冲突的认证环境变量
+    // 清理冲突的认证环境变量（在收集环境变量之前）
     clean_claude_auth_conflict(&mut settings);
 
-    // 使用原子写入
-    write_json_file_atomic(&config_path, &settings)?;
+    // 收集环境变量用于写入 shell 配置（从清理后的 settings 中提取）
+    let mut env_vars_for_shell: Vec<(String, String)> = Vec::new();
+    if let Some(env_obj) = settings.get("env").and_then(|v| v.as_object()) {
+        for (key, value) in env_obj {
+            if let Some(value_str) = value.as_str() {
+                env_vars_for_shell.push((key.clone(), value_str.to_string()));
+            }
+        }
+    }
 
-    tracing::info!("Claude 配置同步完成: {}", config_path.display());
+    // 使用原子写入配置文件
+    write_json_file_atomic(&config_path, &settings)?;
+    tracing::info!("Claude 配置文件同步完成: {}", config_path.display());
+
+    // 同时写入 shell 配置文件
+    if !env_vars_for_shell.is_empty() {
+        match write_env_to_shell_config(&env_vars_for_shell) {
+            Ok(_) => {
+                tracing::info!("Claude 环境变量已写入 shell 配置文件");
+                tracing::info!("请重启终端或执行 'source ~/.zshrc' (或 ~/.bashrc) 使配置生效");
+            }
+            Err(e) => {
+                tracing::warn!("写入 shell 配置文件失败: {}", e);
+                // 不中断流程，配置文件方式仍然可用
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -262,11 +449,14 @@ pub fn read_live_settings(
     match app_type {
         AppType::Claude => {
             let path = home.join(".claude").join("settings.json");
-            if !path.exists() {
-                return Err("Claude settings file not found".into());
+
+            // 读取配置文件 - 直接返回配置文件内容，不包装
+            if path.exists() {
+                let content = std::fs::read_to_string(&path)?;
+                Ok(serde_json::from_str(&content)?)
+            } else {
+                Ok(json!({}))
             }
-            let content = std::fs::read_to_string(&path)?;
-            Ok(serde_json::from_str(&content)?)
         }
         AppType::Codex => {
             let codex_dir = home.join(".codex");
@@ -500,3 +690,52 @@ pub fn sync_from_external(
     // 返回检测到的 provider，由调用方负责更新数据库
     Ok(external_provider)
 }
+
+/// 读取配置用于前端显示（包含配置文件和环境变量）
+pub fn read_live_settings_for_display(
+    app_type: &AppType,
+) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
+
+    match app_type {
+        AppType::Claude => {
+            let path = home.join(".claude").join("settings.json");
+
+            // 读取配置文件
+            let config_file: Value = if path.exists() {
+                let content = std::fs::read_to_string(&path)?;
+                serde_json::from_str(&content)?
+            } else {
+                json!({})
+            };
+
+            // 读取 shell 环境变量
+            let shell_env_vars = read_env_from_shell_config().unwrap_or_default();
+            let mut shell_env_obj = serde_json::Map::new();
+            for (key, value) in shell_env_vars {
+                shell_env_obj.insert(key, json!(value));
+            }
+
+            // 获取 shell 配置文件路径
+            let shell_config_path = get_shell_config_path()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| "~/.zshrc or ~/.bashrc".to_string());
+
+            // 返回包含两部分的结构
+            Ok(json!({
+                "configFile": config_file,
+                "shellEnv": shell_env_obj,
+                "shellConfigPath": shell_config_path
+            }))
+        }
+        _ => {
+            // 其他类型直接返回原始配置
+            read_live_settings(app_type)
+        }
+    }
+}
+
+// 包含测试模块
+#[cfg(test)]
+#[path = "live_sync_tests.rs"]
+mod live_sync_tests;

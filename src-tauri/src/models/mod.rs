@@ -1,6 +1,7 @@
 pub mod anthropic;
 pub mod app_type;
 pub mod codewhisperer;
+pub mod kiro_fingerprint;
 pub mod machine_id;
 pub mod mcp_model;
 pub mod openai;
@@ -23,3 +24,5 @@ pub use provider_model::Provider;
 #[allow(unused_imports)]
 pub use provider_pool_model::*;
 pub use skill_model::{Skill, SkillMetadata, SkillRepo, SkillState, SkillStates};
+
+pub use kiro_fingerprint::{KiroFingerprintBinding, KiroFingerprintStore, SwitchToLocalResult};

@@ -18,10 +18,11 @@ import { getConfig, saveConfig, Config } from "@/hooks/useTauri";
 import { VertexAISection } from "./VertexAISection";
 import { AmpConfigSection } from "./AmpConfigSection";
 import { ProviderIcon } from "@/icons/providers";
-import type {
-  PoolProviderType,
-  CredentialDisplay,
-  UpdateCredentialRequest,
+import {
+  getLocalKiroCredentialUuid,
+  type PoolProviderType,
+  type CredentialDisplay,
+  type UpdateCredentialRequest,
 } from "@/lib/api/providerPool";
 
 export interface ProviderPoolPageRef {
@@ -112,6 +113,9 @@ export const ProviderPoolPage = forwardRef<ProviderPoolPageRef>(
 
     const [migrating, setMigrating] = useState(false);
 
+    // Kiro 本地活跃凭证 UUID
+    const [localActiveUuid, setLocalActiveUuid] = useState<string | null>(null);
+
     // 配置 tab 相关状态
     const [config, setConfig] = useState<Config | null>(null);
     const [configLoading, setConfigLoading] = useState(false);
@@ -150,6 +154,25 @@ export const ProviderPoolPage = forwardRef<ProviderPoolPageRef>(
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab, activeCategory]);
+
+    // 获取本地活跃的 Kiro 凭证 UUID
+    const fetchLocalActiveUuid = async () => {
+      try {
+        const uuid = await getLocalKiroCredentialUuid();
+        console.log("[ProviderPoolPage] Local active Kiro UUID:", uuid);
+        setLocalActiveUuid(uuid);
+      } catch (e) {
+        console.error("Failed to get local Kiro credential:", e);
+        setLocalActiveUuid(null);
+      }
+    };
+
+    useEffect(() => {
+      // 只在 Kiro tab 时检测本地活跃凭证
+      if (activeTab === "kiro") {
+        fetchLocalActiveUuid();
+      }
+    }, [activeTab, overview]); // 当切换到 Kiro tab 或凭证池数据变化时重新检测
 
     useImperativeHandle(ref, () => ({
       refresh,
@@ -623,6 +646,15 @@ export const ProviderPoolPage = forwardRef<ProviderPoolPageRef>(
                     credential.credential_type.includes("oauth");
                   // 判断是否为 Kiro 凭证（支持用量查询）
                   const isKiroCredential = activeTab === "kiro";
+                  const isLocalActive =
+                    isKiroCredential && credential.uuid === localActiveUuid;
+
+                  if (isKiroCredential) {
+                    console.log(
+                      `[ProviderPoolPage] Credential ${credential.uuid.substring(0, 8)}: isLocalActive=${isLocalActive}, localActiveUuid=${localActiveUuid?.substring(0, 8)}`,
+                    );
+                  }
+
                   return (
                     <CredentialCard
                       key={credential.uuid}
@@ -641,6 +673,10 @@ export const ProviderPoolPage = forwardRef<ProviderPoolPageRef>(
                       checkingHealth={checkingHealth === credential.uuid}
                       refreshingToken={refreshingToken === credential.uuid}
                       isKiroCredential={isKiroCredential}
+                      isLocalActive={isLocalActive}
+                      onSwitchToLocal={
+                        isKiroCredential ? fetchLocalActiveUuid : undefined
+                      }
                     />
                   );
                 })}

@@ -21,6 +21,7 @@ import {
   Copy,
   Check,
   Timer,
+  MonitorDown,
 } from "lucide-react";
 import type {
   CredentialDisplay,
@@ -28,7 +29,9 @@ import type {
 } from "@/lib/api/providerPool";
 import {
   getKiroCredentialFingerprint,
+  switchKiroToLocal,
   type KiroFingerprintInfo,
+  type SwitchToLocalResult,
   kiroCredentialApi,
 } from "@/lib/api/providerPool";
 import { usageApi, type UsageInfo } from "@/lib/api/usage";
@@ -47,6 +50,10 @@ interface CredentialCardProps {
   refreshingToken?: boolean;
   /** 是否为 Kiro 凭证（支持用量查询） */
   isKiroCredential?: boolean;
+  /** 是否为当前本地使用的凭证 */
+  isLocalActive?: boolean;
+  /** 切换到本地成功后的回调 */
+  onSwitchToLocal?: () => void;
 }
 
 export function CredentialCard({
@@ -61,6 +68,8 @@ export function CredentialCard({
   checkingHealth,
   refreshingToken,
   isKiroCredential,
+  isLocalActive,
+  onSwitchToLocal,
 }: CredentialCardProps) {
   // 用量查询状态
   const [usageExpanded, setUsageExpanded] = useState(false);
@@ -80,6 +89,12 @@ export function CredentialCard({
   const [kiroStatusLoading, setKiroStatusLoading] = useState(false);
   const [kiroRefreshing, setKiroRefreshing] = useState(false);
   const [kiroStatusExpanded, setKiroStatusExpanded] = useState(false);
+
+  // 切换到本地状态
+  const [switchingToLocal, setSwitchingToLocal] = useState(false);
+  const [switchResult, setSwitchResult] = useState<SwitchToLocalResult | null>(
+    null,
+  );
 
   // 查询指纹信息
   const handleCheckFingerprint = async () => {
@@ -181,6 +196,42 @@ export function CredentialCard({
     }
   };
 
+  // 切换到本地
+  const handleSwitchToLocal = async () => {
+    setSwitchingToLocal(true);
+    setSwitchResult(null);
+
+    try {
+      const result = await switchKiroToLocal(credential.uuid);
+      setSwitchResult(result);
+
+      if (result.success) {
+        console.log("切换到本地成功:", result.message);
+        // 调用回调通知父组件刷新本地活跃凭证
+        if (onSwitchToLocal) {
+          onSwitchToLocal();
+        }
+      } else {
+        console.error("切换到本地失败:", result.message);
+      }
+
+      // 3秒后自动清除结果提示
+      setTimeout(() => {
+        setSwitchResult(null);
+      }, 5000);
+    } catch (e) {
+      console.error("切换到本地异常:", e);
+      setSwitchResult({
+        success: false,
+        message: e instanceof Error ? e.message : String(e),
+        requires_action: false,
+        requires_kiro_restart: false,
+      });
+    } finally {
+      setSwitchingToLocal(false);
+    }
+  };
+
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return "从未";
     const date = new Date(dateStr);
@@ -244,12 +295,14 @@ export function CredentialCard({
 
   return (
     <div
-      className={`rounded-xl border transition-all hover:shadow-md ${
+      className={`rounded-xl border-2 transition-all hover:shadow-md ${
         credential.is_disabled
           ? "border-gray-200 bg-gray-50/80 opacity-70 dark:border-gray-700 dark:bg-gray-900/60"
-          : isHealthy
-            ? "border-green-200 bg-gradient-to-r from-green-50/80 to-white dark:border-green-800 dark:bg-gradient-to-r dark:from-green-950/40 dark:to-transparent"
-            : "border-red-200 bg-gradient-to-r from-red-50/80 to-white dark:border-red-800 dark:bg-gradient-to-r dark:from-red-950/40 dark:to-transparent"
+          : isLocalActive
+            ? "border-amber-400 bg-gradient-to-r from-amber-50/80 to-white dark:border-amber-500 dark:bg-gradient-to-r dark:from-amber-950/40 dark:to-transparent"
+            : isHealthy
+              ? "border-green-200 bg-gradient-to-r from-green-50/80 to-white dark:border-green-800 dark:bg-gradient-to-r dark:from-green-950/40 dark:to-transparent"
+              : "border-red-200 bg-gradient-to-r from-red-50/80 to-white dark:border-red-800 dark:bg-gradient-to-r dark:from-red-950/40 dark:to-transparent"
       }`}
     >
       {/* 第一行：状态图标 + 名称 + 标签 + 操作按钮 */}
@@ -418,6 +471,24 @@ export function CredentialCard({
             >
               <RefreshCw
                 className={`h-4 w-4 ${kiroRefreshing ? "animate-spin" : ""}`}
+              />
+            </button>
+          )}
+
+          {/* Kiro 切换到本地按钮 - 仅 Kiro 凭证显示 */}
+          {isKiroCredential && (
+            <button
+              onClick={handleSwitchToLocal}
+              disabled={switchingToLocal}
+              className={`rounded-lg p-2.5 transition-colors ${
+                switchingToLocal
+                  ? "bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-200"
+                  : "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400"
+              } disabled:opacity-50`}
+              title="切换到本地 Kiro IDE"
+            >
+              <MonitorDown
+                className={`h-4 w-4 ${switchingToLocal ? "animate-pulse" : ""}`}
               />
             </button>
           )}
@@ -604,6 +675,31 @@ export function CredentialCard({
         <div className="mx-4 mb-3 rounded-lg bg-red-100 p-3 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-300">
           {credential.last_error_message.slice(0, 150)}
           {credential.last_error_message.length > 150 && "..."}
+        </div>
+      )}
+
+      {/* 切换到本地结果提示 - 仅 Kiro 凭证 */}
+      {isKiroCredential && switchResult && (
+        <div
+          className={`mx-4 mb-3 rounded-lg p-3 text-sm ${
+            switchResult.success
+              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+              : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {switchResult.success ? (
+              <Check className="h-4 w-4 shrink-0" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+            )}
+            <span>{switchResult.message}</span>
+          </div>
+          {switchResult.success && switchResult.requires_kiro_restart && (
+            <div className="mt-2 text-xs opacity-80">
+              请重启 Kiro IDE 使配置生效
+            </div>
+          )}
         </div>
       )}
 

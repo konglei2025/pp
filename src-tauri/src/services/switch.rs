@@ -225,6 +225,6 @@ impl SwitchService {
     /// Read current live settings for an app type
     pub fn read_live_settings(app_type: &str) -> Result<serde_json::Value, String> {
         let app_type_enum = app_type.parse::<AppType>().map_err(|e| e.to_string())?;
-        live_sync::read_live_settings(&app_type_enum).map_err(|e| e.to_string())
+        live_sync::read_live_settings_for_display(&app_type_enum).map_err(|e| e.to_string())
     }
 }
