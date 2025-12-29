@@ -18,6 +18,7 @@ import { ToolsPage } from "./components/tools/ToolsPage";
 import { BrowserInterceptorTool } from "./components/tools/browser-interceptor/BrowserInterceptorTool";
 import { AgentChatPage } from "./components/agent";
 import { PluginUIRenderer } from "./components/plugins/PluginUIRenderer";
+import { PluginsPage } from "./components/plugins/PluginsPage";
 import { Toaster } from "./components/ui/sonner";
 import { flowEventManager } from "./lib/flowEventManager";
 
@@ -37,6 +38,7 @@ type Page =
   | "flow-monitor"
   | "agent"
   | "tools"
+  | "plugins"
   | "browser-interceptor"
   | "settings"
   | `plugin:${string}`;
@@ -90,6 +92,8 @@ function App() {
         return <AgentChatPage />;
       case "tools":
         return <ToolsPage onNavigate={setCurrentPage} />;
+      case "plugins":
+        return <PluginsPage />;
       case "browser-interceptor":
         return <BrowserInterceptorTool onNavigate={setCurrentPage} />;
       case "settings":

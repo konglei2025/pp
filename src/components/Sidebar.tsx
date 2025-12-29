@@ -6,6 +6,7 @@ import {
   Activity,
   Wrench,
   Bot,
+  Puzzle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,7 @@ type Page =
   | "flow-monitor"
   | "agent"
   | "tools"
+  | "plugins"
   | "browser-interceptor"
   | "settings"
   | `plugin:${string}`;
@@ -41,6 +43,7 @@ const navItems = [
   { id: "flow-monitor" as Page, label: "Flow Monitor", icon: Activity },
   { id: "agent" as Page, label: "AI Agent", icon: Bot },
   { id: "tools" as Page, label: "工具", icon: Wrench },
+  { id: "plugins" as Page, label: "插件中心", icon: Puzzle },
   { id: "settings" as Page, label: "设置", icon: Settings },
 ];
 

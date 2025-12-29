@@ -6,6 +6,7 @@
 
 | 文件 | 说明 |
 |------|------|
+| `PluginsPage.tsx` | 插件中心页面，独立的导航栏入口 |
 | `PluginManager.tsx` | 插件管理主组件，显示插件列表和状态 |
 | `PluginInstallDialog.tsx` | 插件安装对话框，支持本地文件和 URL 安装 |
 | `PluginUninstallDialog.tsx` | 插件卸载确认对话框 |
