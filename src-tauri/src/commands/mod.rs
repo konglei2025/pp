@@ -3,7 +3,6 @@ pub mod auto_fix_cmd;
 pub mod browser_interceptor_cmd;
 pub mod config_cmd;
 pub mod flow_monitor_cmd;
-pub mod goose_agent_cmd;
 pub mod injection_cmd;
 pub mod kiro_local;
 pub mod machine_id_cmd;

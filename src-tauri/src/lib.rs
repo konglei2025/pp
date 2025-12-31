@@ -29,7 +29,7 @@ use std::sync::Arc;
 use tauri::{Manager, Runtime};
 use tokio::sync::RwLock;
 
-use agent::{GooseAgentState, NativeAgentState};
+use agent::NativeAgentState;
 use commands::browser_interceptor_cmd::BrowserInterceptorState;
 use commands::flow_monitor_cmd::{
     BatchOperationsState, BookmarkManagerState, EnhancedStatsServiceState, FlowInterceptorState,
@@ -1695,9 +1695,6 @@ pub fn run() {
     // Initialize NativeAgentState
     let native_agent_state = NativeAgentState::new();
 
-    // Initialize GooseAgentState
-    let goose_agent_state = GooseAgentState::new();
-
     // FlowQueryService 需要 file_store，如果没有则创建一个临时的
     let flow_query_service_state = if let Some(file_store) = flow_file_store {
         let query_service = FlowQueryService::new(flow_monitor.memory_store(), file_store);
@@ -1797,7 +1794,6 @@ pub fn run() {
         .manage(batch_operations_state)
         .manage(browser_interceptor_state)
         .manage(native_agent_state)
-        .manage(goose_agent_state)
         .on_window_event(move |window, event| {
             // 处理窗口关闭事件
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -2429,14 +2425,6 @@ pub fn run() {
             commands::native_agent_cmd::native_agent_get_session,
             commands::native_agent_cmd::native_agent_delete_session,
             commands::native_agent_cmd::native_agent_list_sessions,
-            // Goose Agent commands
-            commands::goose_agent_cmd::goose_agent_init,
-            commands::goose_agent_cmd::goose_agent_status,
-            commands::goose_agent_cmd::goose_agent_reset,
-            commands::goose_agent_cmd::goose_agent_create_session,
-            commands::goose_agent_cmd::goose_agent_send_message,
-            commands::goose_agent_cmd::goose_agent_extend_system_prompt,
-            commands::goose_agent_cmd::goose_agent_list_providers,
             // Network commands
             commands::network_cmd::get_network_info,
         ])

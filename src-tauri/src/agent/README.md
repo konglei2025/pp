@@ -6,10 +6,6 @@
 
 AI Agent 集成模块，提供原生 Rust Agent 功能，支持**连续对话**和**工具调用**。
 
-参考 [goose](https://github.com/block/goose) 项目的 Agent 设计：
-- **Conversation History**: 维护完整的消息历史，支持多轮对话
-- **Tools/Skills**: 预留工具调用接口（MCP 协议兼容）
-
 ### 设计决策
 
 - **原生 Rust 实现**：直接在 Rust 中处理 Agent 功能，复用现有 provider 和流式处理能力
