@@ -785,6 +785,18 @@ function ResponseTab({
 }: ResponseTabProps) {
   const { response } = flow;
 
+  // 调试日志
+  console.log("[FlowDetail] ResponseTab - response:", response);
+  console.log("[FlowDetail] ResponseTab - content:", response?.content);
+  console.log(
+    "[FlowDetail] ResponseTab - content length:",
+    response?.content?.length,
+  );
+  console.log(
+    "[FlowDetail] ResponseTab - expandedSections:",
+    Array.from(expandedSections),
+  );
+
   if (!response) {
     return (
       <div className="rounded-lg border bg-muted/50 p-8 text-center text-muted-foreground">
