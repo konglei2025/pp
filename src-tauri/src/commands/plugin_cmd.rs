@@ -175,12 +175,40 @@ pub struct PluginUIInfo {
 /// 尝试读取 plugin.json 文件并解析为 PluginManifest
 fn read_plugin_manifest(install_path: &Path) -> Option<PluginManifest> {
     let manifest_path = install_path.join("plugin.json");
+    tracing::debug!(
+        "read_plugin_manifest: install_path={:?}, manifest_path={:?}, exists={}",
+        install_path,
+        manifest_path,
+        manifest_path.exists()
+    );
+
     if !manifest_path.exists() {
+        tracing::debug!("read_plugin_manifest: manifest file does not exist");
         return None;
     }
 
-    let content = std::fs::read_to_string(&manifest_path).ok()?;
-    serde_json::from_str(&content).ok()
+    match std::fs::read_to_string(&manifest_path) {
+        Ok(content) => {
+            tracing::debug!(
+                "read_plugin_manifest: file content length={}",
+                content.len()
+            );
+            match serde_json::from_str(&content) {
+                Ok(manifest) => {
+                    tracing::debug!("read_plugin_manifest: parsed successfully");
+                    Some(manifest)
+                }
+                Err(e) => {
+                    tracing::error!("read_plugin_manifest: JSON parse error: {}", e);
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!("read_plugin_manifest: read file error: {}", e);
+            None
+        }
+    }
 }
 
 /// 获取带有 UI 配置的已安装插件列表
@@ -322,7 +350,17 @@ pub async fn read_plugin_manifest_cmd(
     let plugins_dir = manager.plugins_dir();
     let plugin_path = plugins_dir.join(&plugin_id);
 
-    Ok(read_plugin_manifest(&plugin_path))
+    tracing::debug!(
+        "read_plugin_manifest_cmd: plugin_id={}, plugins_dir={:?}, plugin_path={:?}",
+        plugin_id,
+        plugins_dir,
+        plugin_path
+    );
+
+    let result = read_plugin_manifest(&plugin_path);
+    tracing::debug!("read_plugin_manifest_cmd: result={:?}", result.is_some());
+
+    Ok(result)
 }
 
 /// 启动插件 UI（用于 binary 类型插件）

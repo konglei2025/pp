@@ -29,7 +29,7 @@ axum-server = { version = "0.7", features = ["tls-rustls"] }
 rustls-pemfile = "2"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["limit", "cors"] }
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.12", features = ["json", "stream", "gzip", "brotli", "deflate"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "5"

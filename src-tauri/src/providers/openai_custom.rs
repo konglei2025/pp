@@ -3,6 +3,7 @@ use crate::models::openai::ChatCompletionRequest;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OpenAICustomConfig {
@@ -16,11 +17,24 @@ pub struct OpenAICustomProvider {
     pub client: Client,
 }
 
+/// 创建配置好的 HTTP 客户端
+fn create_http_client() -> Client {
+    Client::builder()
+        .connect_timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(600)) // 10 分钟总超时
+        .tcp_keepalive(Duration::from_secs(60))
+        .gzip(true) // 自动解压 gzip 响应
+        .brotli(true) // 自动解压 brotli 响应
+        .deflate(true) // 自动解压 deflate 响应
+        .build()
+        .unwrap_or_else(|_| Client::new())
+}
+
 impl Default for OpenAICustomProvider {
     fn default() -> Self {
         Self {
             config: OpenAICustomConfig::default(),
-            client: Client::new(),
+            client: create_http_client(),
         }
     }
 }
@@ -38,7 +52,7 @@ impl OpenAICustomProvider {
                 base_url,
                 enabled: true,
             },
-            client: Client::new(),
+            client: create_http_client(),
         }
     }
 
