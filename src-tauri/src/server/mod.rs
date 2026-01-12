@@ -26,7 +26,8 @@ use crate::providers::openai_custom::OpenAICustomProvider;
 use crate::providers::qwen::QwenProvider;
 use crate::server_utils::{
     build_anthropic_response, build_anthropic_stream_response, build_error_response,
-    build_error_response_with_status, build_gemini_native_request, health, models, parse_cw_response,
+    build_error_response_with_status, build_gemini_native_request, health, models,
+    parse_cw_response,
 };
 use crate::services::kiro_event_service::KiroEventService;
 use crate::services::provider_pool_service::ProviderPoolService;
@@ -206,7 +207,10 @@ impl ServerState {
         ServerStatus {
             running: self.running,
             // 使用实际运行的 host，如果没有则使用配置的 host
-            host: self.running_host.clone().unwrap_or_else(|| self.config.server.host.clone()),
+            host: self
+                .running_host
+                .clone()
+                .unwrap_or_else(|| self.config.server.host.clone()),
             port: self.config.server.port,
             requests: self.requests,
             uptime_secs: self.start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0),
@@ -284,9 +288,12 @@ impl ServerState {
         // 检查配置的 host 是否有效（在当前网卡列表中或是特殊地址）
         let host = {
             let configured_host = &self.config.server.host;
-            
+
             // 特殊地址不需要检查
-            if configured_host == "0.0.0.0" || configured_host == "127.0.0.1" || configured_host == "localhost" {
+            if configured_host == "0.0.0.0"
+                || configured_host == "127.0.0.1"
+                || configured_host == "localhost"
+            {
                 configured_host.clone()
             } else {
                 // 检查 IP 是否在当前网卡列表中
@@ -297,18 +304,21 @@ impl ServerState {
                         } else {
                             // IP 不在当前网卡列表中，使用当前的局域网 IP
                             // 优先选择 192.168.x.x 或 10.x.x.x 开头的 IP（真正的局域网 IP）
-                            let preferred_ip = network_info.all_ips.iter()
+                            let preferred_ip = network_info
+                                .all_ips
+                                .iter()
                                 .find(|ip| ip.starts_with("192.168.") || ip.starts_with("10."));
-                            
+
                             let new_ip = preferred_ip
                                 .or_else(|| network_info.lan_ip.as_ref())
                                 .or_else(|| network_info.all_ips.first())
                                 .cloned()
                                 .unwrap_or_else(|| "127.0.0.1".to_string());
-                            
+
                             tracing::warn!(
                                 "[SERVER] 配置的 IP {} 不在当前网卡列表中，自动切换到 {}",
-                                configured_host, new_ip
+                                configured_host,
+                                new_ip
                             );
                             eprintln!(
                                 "[SERVER] 警告：配置的 IP {} 不在当前网卡列表中，自动切换到 {}",
@@ -317,9 +327,7 @@ impl ServerState {
                             new_ip
                         }
                     }
-                    Err(_) => {
-                        configured_host.clone()
-                    }
+                    Err(_) => configured_host.clone(),
                 }
             }
         };
@@ -1327,11 +1335,13 @@ async fn gemini_generate_content(
                     Json(resp).into_response()
                 }
                 Err(api_err) => {
-                    state
-                        .logs
-                        .write()
-                        .await
-                        .add("error", &format!("[GEMINI] 请求失败 (HTTP {}): {}", api_err.status_code, api_err.message));
+                    state.logs.write().await.add(
+                        "error",
+                        &format!(
+                            "[GEMINI] 请求失败 (HTTP {}): {}",
+                            api_err.status_code, api_err.message
+                        ),
+                    );
 
                     // 直接使用 AntigravityApiError 的状态码构建响应
                     build_error_response_with_status(api_err.status_code, &api_err.to_string())
@@ -1356,9 +1366,13 @@ async fn list_routes(State(state): State<AppState>) -> impl IntoResponse {
     let display_base_url = {
         // 从 base_url 中提取 host 部分
         let url_parts: Vec<&str> = state.base_url.split("://").collect();
-        let host_port = if url_parts.len() > 1 { url_parts[1] } else { &state.base_url };
+        let host_port = if url_parts.len() > 1 {
+            url_parts[1]
+        } else {
+            &state.base_url
+        };
         let host = host_port.split(':').next().unwrap_or("localhost");
-        
+
         // 检查是否需要替换 IP
         let should_replace = if host == "0.0.0.0" || host == "127.0.0.1" || host == "localhost" {
             // 0.0.0.0 需要替换为局域网 IP，127.0.0.1 和 localhost 保持不变
@@ -1371,12 +1385,14 @@ async fn list_routes(State(state): State<AppState>) -> impl IntoResponse {
                 false
             }
         };
-        
+
         if should_replace {
             // 获取局域网 IP 进行替换
             // 优先选择 192.168.x.x 或 10.x.x.x 开头的 IP（真正的局域网 IP）
             if let Ok(network_info) = crate::commands::network_cmd::get_network_info() {
-                let new_ip = network_info.all_ips.iter()
+                let new_ip = network_info
+                    .all_ips
+                    .iter()
                     .find(|ip| ip.starts_with("192.168.") || ip.starts_with("10."))
                     .or_else(|| network_info.lan_ip.as_ref())
                     .or_else(|| network_info.all_ips.first())

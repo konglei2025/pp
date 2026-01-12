@@ -448,7 +448,7 @@ pub async fn call_provider_anthropic(
                             Some(&api_err.message),
                         );
                     }
-                    
+
                     // 直接使用 AntigravityApiError 的状态码构建响应
                     build_error_response_with_status(api_err.status_code, &api_err.to_string())
                 }
@@ -1545,16 +1545,16 @@ pub async fn call_provider_openai(
             // 非流式请求处理
             eprintln!("[ANTIGRAVITY_OPENAI] ========== 开始处理非流式请求 ==========");
             eprintln!("[ANTIGRAVITY_OPENAI] 模型: {}", request.model);
-            
+
             // 获取 project_id 用于请求
             let proj_id = antigravity.project_id.clone().unwrap_or_default();
             eprintln!("[ANTIGRAVITY_OPENAI] 项目ID: {}", proj_id);
-            
+
             // 转换请求格式
             eprintln!("[ANTIGRAVITY_OPENAI] 开始转换请求格式...");
             let antigravity_request = convert_openai_to_antigravity_with_context(request, &proj_id);
             eprintln!("[ANTIGRAVITY_OPENAI] 请求格式转换完成");
-            
+
             eprintln!("[ANTIGRAVITY_OPENAI] 调用 generate_content...");
             match antigravity.generate_content(&request.model, &antigravity_request).await {
                 Ok(resp) => {
@@ -1566,7 +1566,7 @@ pub async fn call_provider_openai(
                 Err(api_err) => {
                     eprintln!("[ANTIGRAVITY_OPENAI] generate_content 失败 (HTTP {}): {}", api_err.status_code, api_err.message);
                     eprintln!("[ANTIGRAVITY_OPENAI] ========== 非流式请求处理失败 ==========");
-                    
+
                     // 直接使用 AntigravityApiError 的状态码构建响应
                     build_error_response_with_status(api_err.status_code, &api_err.to_string())
                 }

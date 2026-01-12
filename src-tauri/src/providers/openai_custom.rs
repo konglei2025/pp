@@ -69,7 +69,7 @@ impl OpenAICustomProvider {
 
     /// 构建完整的 API URL
     /// 智能处理用户输入的 base_url，支持多种 API 版本格式
-    /// 
+    ///
     /// 支持的格式：
     /// - `https://api.openai.com` -> `https://api.openai.com/v1/chat/completions`
     /// - `https://api.openai.com/v1` -> `https://api.openai.com/v1/chat/completions`
@@ -136,9 +136,12 @@ impl OpenAICustomProvider {
             .ok_or("OpenAI API key not configured")?;
 
         let url = self.build_url("chat/completions");
-        
+
         eprintln!("[OPENAI_CUSTOM] chat_completions URL: {}", url);
-        eprintln!("[OPENAI_CUSTOM] chat_completions base_url: {}", self.get_base_url());
+        eprintln!(
+            "[OPENAI_CUSTOM] chat_completions base_url: {}",
+            self.get_base_url()
+        );
 
         let resp = self
             .client
@@ -160,7 +163,7 @@ impl OpenAICustomProvider {
             .ok_or("OpenAI API key not configured")?;
 
         let url = self.build_url("models");
-        
+
         eprintln!("[OPENAI_CUSTOM] list_models URL: {}", url);
 
         let resp = self

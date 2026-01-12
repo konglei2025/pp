@@ -10,17 +10,19 @@ use crate::models::route_model::{RouteInfo, RouteListResponse};
 fn get_valid_base_url(config: &config::Config) -> String {
     let configured_host = &config.server.host;
     let port = config.server.port;
-    
+
     // 特殊地址不需要检查
     if configured_host == "127.0.0.1" || configured_host == "localhost" {
         return format!("http://{}:{}", configured_host, port);
     }
-    
+
     // 0.0.0.0 或其他 IP 需要检查
     if let Ok(network_info) = crate::commands::network_cmd::get_network_info() {
         let host = if configured_host == "0.0.0.0" {
             // 0.0.0.0 替换为局域网 IP
-            network_info.all_ips.iter()
+            network_info
+                .all_ips
+                .iter()
                 .find(|ip| ip.starts_with("192.168.") || ip.starts_with("10."))
                 .or_else(|| network_info.lan_ip.as_ref())
                 .or_else(|| network_info.all_ips.first())
@@ -31,7 +33,9 @@ fn get_valid_base_url(config: &config::Config) -> String {
             configured_host.clone()
         } else {
             // IP 不在当前网卡列表中，替换为局域网 IP
-            network_info.all_ips.iter()
+            network_info
+                .all_ips
+                .iter()
                 .find(|ip| ip.starts_with("192.168.") || ip.starts_with("10."))
                 .or_else(|| network_info.lan_ip.as_ref())
                 .or_else(|| network_info.all_ips.first())

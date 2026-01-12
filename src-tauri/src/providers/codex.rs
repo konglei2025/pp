@@ -597,7 +597,8 @@ impl CodexProvider {
             ("client_id", OPENAI_CLIENT_ID),
             ("response_type", "code"),
             ("redirect_uri", &self.get_redirect_uri()),
-            ("scope", "openid email profile offline_access"),
+            // 必须包含 api.responses.write 才能使用 responses API
+            ("scope", "openid email profile offline_access api.responses.write api.responses.read api.model.request"),
             ("state", state),
             ("code_challenge", &pkce_codes.code_challenge),
             ("code_challenge_method", "S256"),
@@ -750,7 +751,8 @@ impl CodexProvider {
             ("client_id", OPENAI_CLIENT_ID),
             ("grant_type", "refresh_token"),
             ("refresh_token", refresh_token.as_str()),
-            ("scope", "openid profile email"),
+            // 必须包含 api.responses.write 才能使用 responses API
+            ("scope", "openid email profile offline_access api.responses.write api.responses.read api.model.request"),
         ];
 
         let resp = self
@@ -1746,9 +1748,26 @@ mod tests {
 // OAuth 登录功能（参考 Antigravity 实现）
 // ============================================================================
 
+use once_cell::sync::Lazy;
 use std::sync::Arc;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, RwLock};
 use uuid::Uuid;
+
+/// 全局 Codex OAuth 服务器状态
+/// 用于在重新打开授权对话框时关闭之前的服务器
+static CODEX_OAUTH_SERVER_SHUTDOWN: Lazy<RwLock<Option<oneshot::Sender<()>>>> =
+    Lazy::new(|| RwLock::new(None));
+
+/// 停止之前运行的 Codex OAuth 服务器（如果有）
+pub async fn stop_codex_oauth_server() {
+    let mut guard = CODEX_OAUTH_SERVER_SHUTDOWN.write().await;
+    if let Some(shutdown_tx) = guard.take() {
+        tracing::info!("[Codex OAuth] 关闭之前的 OAuth 服务器");
+        let _ = shutdown_tx.send(());
+        // 给服务器一些时间来关闭
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+}
 
 /// OAuth 登录成功后的凭证信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1777,7 +1796,8 @@ pub fn generate_codex_auth_url(state: &str, code_challenge: &str) -> String {
         ("client_id", OPENAI_CLIENT_ID),
         ("response_type", "code"),
         ("redirect_uri", redirect_uri.as_str()),
-        ("scope", "openid email profile offline_access"),
+        // 必须包含 api.responses.write 才能使用 responses API
+        ("scope", "openid email profile offline_access api.responses.write api.responses.read api.model.request"),
         ("state", state),
         ("code_challenge", code_challenge),
         ("code_challenge_method", "S256"),
@@ -1890,6 +1910,9 @@ pub async fn start_codex_oauth_server_and_get_url() -> Result<
     use std::collections::HashMap;
     use tokio::net::TcpListener;
 
+    // 首先停止之前可能运行的 OAuth 服务器
+    stop_codex_oauth_server().await;
+
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()?;
@@ -1906,6 +1929,15 @@ pub async fn start_codex_oauth_server_and_get_url() -> Result<
     // 创建 channel 用于接收回调结果
     let (tx, rx) = oneshot::channel::<Result<CodexOAuthResult, String>>();
     let tx = Arc::new(tokio::sync::Mutex::new(Some(tx)));
+
+    // 创建 shutdown channel
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+
+    // 保存 shutdown sender 到全局状态
+    {
+        let mut guard = CODEX_OAUTH_SERVER_SHUTDOWN.write().await;
+        *guard = Some(shutdown_tx);
+    }
 
     // 使用固定端口 1455（OpenAI OAuth 要求）
     let port = OPENAI_OAUTH_CALLBACK_PORT;
@@ -2095,8 +2127,11 @@ pub async fn start_codex_oauth_server_and_get_url() -> Result<
         }),
     );
 
-    // 启动服务器
-    let server = axum::serve(listener, app);
+    // 启动服务器（支持优雅关闭）
+    let server = axum::serve(listener, app).with_graceful_shutdown(async move {
+        let _ = shutdown_rx.await;
+        tracing::info!("[Codex OAuth] 服务器收到关闭信号");
+    });
 
     // 创建等待 future
     let wait_future = async move {
@@ -2119,8 +2154,18 @@ pub async fn start_codex_oauth_server_and_get_url() -> Result<
         });
 
         match timeout.await {
-            Ok(result) => result,
-            Err(_) => Err("OAuth 登录超时（5分钟）".into()),
+            Ok(result) => {
+                // 成功或失败后都清理全局状态
+                let mut guard = CODEX_OAUTH_SERVER_SHUTDOWN.write().await;
+                *guard = None;
+                result
+            }
+            Err(_) => {
+                // 超时后也清理全局状态
+                let mut guard = CODEX_OAUTH_SERVER_SHUTDOWN.write().await;
+                *guard = None;
+                Err("OAuth 登录超时（5分钟）".into())
+            }
         }
     };
 

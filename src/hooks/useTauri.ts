@@ -209,6 +209,28 @@ export async function setDefaultProvider(provider: string): Promise<string> {
   return safeInvoke("set_default_provider", { provider });
 }
 
+/**
+ * 更新 Provider 的环境变量
+ *
+ * 当用户在 API Server 页面选择一个 API Key Provider 时调用
+ * 会更新 ~/.claude/settings.json 和 shell 配置文件中的环境变量
+ *
+ * @param providerType Provider 类型（如 "anthropic", "openai", "gemini"）
+ * @param apiHost Provider 的 API Host
+ * @param apiKey 可选的 API Key
+ */
+export async function updateProviderEnvVars(
+  providerType: string,
+  apiHost: string,
+  apiKey?: string,
+): Promise<void> {
+  return safeInvoke("update_provider_env_vars", {
+    providerType,
+    apiHost,
+    apiKey: apiKey || null,
+  });
+}
+
 export async function refreshKiroToken(): Promise<string> {
   return safeInvoke("refresh_kiro_token");
 }

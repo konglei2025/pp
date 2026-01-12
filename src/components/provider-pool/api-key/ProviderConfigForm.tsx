@@ -356,7 +356,8 @@ export const ProviderConfigForm: React.FC<ProviderConfigFormProps> = ({
           data-testid="custom-models-input"
         />
         <p className="text-xs text-muted-foreground">
-          该 Provider 支持的模型列表，用逗号分隔。用于不支持 /models 接口的 Provider（如智谱）
+          该 Provider 支持的模型列表，用逗号分隔。用于不支持 /models 接口的
+          Provider（如智谱）
         </p>
       </div>
 

@@ -102,6 +102,7 @@ impl TestContext {
             project: None,
             location: None,
             region: None,
+            custom_models: vec![],
             created_at: now,
             updated_at: now,
         };
@@ -709,6 +710,7 @@ mod unit_tests {
                 None,
                 None,
                 None,
+                None,
             )
             .expect("Failed to update provider");
 
@@ -830,6 +832,7 @@ mod unit_tests {
             project: None,
             location: None,
             region: None,
+            custom_models: vec![],
             created_at: now,
             updated_at: now,
         };

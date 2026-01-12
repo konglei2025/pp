@@ -42,7 +42,11 @@ impl AntigravityApiError {
     }
 
     /// 创建带响应体的 API 错误
-    pub fn with_body(status_code: u16, message: impl Into<String>, body: impl Into<String>) -> Self {
+    pub fn with_body(
+        status_code: u16,
+        message: impl Into<String>,
+        body: impl Into<String>,
+    ) -> Self {
         Self {
             status_code,
             message: message.into(),
@@ -840,8 +844,14 @@ impl AntigravityProvider {
         eprintln!("========== [ANTIGRAVITY_API] 请求详情 ==========");
         eprintln!("[ANTIGRAVITY_API] URL: {}", url);
         eprintln!("[ANTIGRAVITY_API] Method: {}", method);
-        eprintln!("[ANTIGRAVITY_API] Token (前20字符): {}...", &token[..token.len().min(20)]);
-        eprintln!("[ANTIGRAVITY_API] 请求体: {}", serde_json::to_string_pretty(body).unwrap_or_default());
+        eprintln!(
+            "[ANTIGRAVITY_API] Token (前20字符): {}...",
+            &token[..token.len().min(20)]
+        );
+        eprintln!(
+            "[ANTIGRAVITY_API] 请求体: {}",
+            serde_json::to_string_pretty(body).unwrap_or_default()
+        );
 
         let resp = self
             .client
@@ -876,10 +886,11 @@ impl AntigravityProvider {
             AntigravityApiError::new(500, format!("Failed to read response: {}", e))
         })?;
         eprintln!("[ANTIGRAVITY_API] 响应体: {}", response_text);
-        
-        let data: serde_json::Value = serde_json::from_str(&response_text)
-            .map_err(|e| AntigravityApiError::new(500, format!("Failed to parse response: {}", e)))?;
-        
+
+        let data: serde_json::Value = serde_json::from_str(&response_text).map_err(|e| {
+            AntigravityApiError::new(500, format!("Failed to parse response: {}", e))
+        })?;
+
         eprintln!("========== [ANTIGRAVITY_API] 请求成功 ==========");
         Ok(data)
     }
@@ -902,27 +913,31 @@ impl AntigravityProvider {
                 Err(e) => {
                     // 使用 AntigravityApiError 的方法判断是否可重试
                     let should_fallback = e.is_retryable();
-                    
+
                     if should_fallback && idx + 1 < self.base_urls.len() {
                         tracing::warn!(
                             "[Antigravity] {} 返回可重试错误 (HTTP {}), 尝试下一个端点",
-                            base_url, e.status_code
+                            base_url,
+                            e.status_code
                         );
                         last_error = Some(e);
                         continue;
                     }
-                    
+
                     // 403、401 等权限错误直接返回，不降级
                     tracing::warn!(
                         "[Antigravity] {} 失败 (HTTP {}): {}",
-                        base_url, e.status_code, e.message
+                        base_url,
+                        e.status_code,
+                        e.message
                     );
                     return Err(e);
                 }
             }
         }
 
-        Err(last_error.unwrap_or_else(|| AntigravityApiError::new(503, "All Antigravity base URLs failed")))
+        Err(last_error
+            .unwrap_or_else(|| AntigravityApiError::new(503, "All Antigravity base URLs failed")))
     }
 
     /// 发现项目 ID
@@ -1032,16 +1047,22 @@ impl AntigravityProvider {
     ) -> Result<serde_json::Value, AntigravityApiError> {
         eprintln!("========== [ANTIGRAVITY_GENERATE] 开始生成内容 ==========");
         eprintln!("[ANTIGRAVITY_GENERATE] 模型: {}", model);
-        eprintln!("[ANTIGRAVITY_GENERATE] 请求体: {}", serde_json::to_string_pretty(request_body).unwrap_or_default());
-        
+        eprintln!(
+            "[ANTIGRAVITY_GENERATE] 请求体: {}",
+            serde_json::to_string_pretty(request_body).unwrap_or_default()
+        );
+
         let project_id = self.project_id.clone().unwrap_or_else(generate_project_id);
         eprintln!("[ANTIGRAVITY_GENERATE] 项目ID: {}", project_id);
-        
+
         let actual_model = alias_to_model_name(model);
         eprintln!("[ANTIGRAVITY_GENERATE] 实际模型名: {}", actual_model);
 
         let payload = self.build_antigravity_request(&actual_model, &project_id, request_body);
-        eprintln!("[ANTIGRAVITY_GENERATE] 构建的 payload: {}", serde_json::to_string_pretty(&payload).unwrap_or_default());
+        eprintln!(
+            "[ANTIGRAVITY_GENERATE] 构建的 payload: {}",
+            serde_json::to_string_pretty(&payload).unwrap_or_default()
+        );
 
         eprintln!("[ANTIGRAVITY_GENERATE] 调用 call_api...");
         let resp = self.call_api("generateContent", &payload).await?;

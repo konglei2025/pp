@@ -635,6 +635,7 @@ pub fn run() {
             app_commands::set_default_provider,
             app_commands::get_endpoint_providers,
             app_commands::set_endpoint_provider,
+            app_commands::update_provider_env_vars,
             // Unified OAuth commands (new)
             commands::oauth_cmd::get_oauth_credentials,
             commands::oauth_cmd::reload_oauth_credentials,

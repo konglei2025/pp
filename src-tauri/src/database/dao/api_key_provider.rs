@@ -234,7 +234,7 @@ impl ApiKeyProviderDao {
         } else {
             Some(serde_json::to_string(&provider.custom_models).unwrap_or_default())
         };
-        
+
         conn.execute(
             "INSERT INTO api_key_providers
              (id, name, type, api_host, is_system, group_name, enabled, sort_order,
@@ -271,7 +271,7 @@ impl ApiKeyProviderDao {
         } else {
             Some(serde_json::to_string(&provider.custom_models).unwrap_or_default())
         };
-        
+
         conn.execute(
             "UPDATE api_key_providers SET
              name = ?2, type = ?3, api_host = ?4, is_system = ?5, group_name = ?6,

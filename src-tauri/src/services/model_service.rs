@@ -147,7 +147,11 @@ impl ModelService {
 
         if !status.is_success() {
             let error_body = response.text().await.unwrap_or_default();
-            tracing::error!("[MODEL_SERVICE] OpenAI HTTP 错误: status={}, body={}", status, error_body);
+            tracing::error!(
+                "[MODEL_SERVICE] OpenAI HTTP 错误: status={}, body={}",
+                status,
+                error_body
+            );
             return Err(format!("HTTP 错误: {}", status));
         }
 
@@ -158,13 +162,18 @@ impl ModelService {
 
         tracing::debug!("[MODEL_SERVICE] OpenAI 响应体: {}", response_text);
 
-        let models_response: ModelsResponse = serde_json::from_str(&response_text).map_err(|e| {
-            tracing::error!("[MODEL_SERVICE] 解析 OpenAI 响应失败: {}, 响应内容: {}", e, response_text);
-            format!("解析响应失败: {}", e)
-        })?;
+        let models_response: ModelsResponse =
+            serde_json::from_str(&response_text).map_err(|e| {
+                tracing::error!(
+                    "[MODEL_SERVICE] 解析 OpenAI 响应失败: {}, 响应内容: {}",
+                    e,
+                    response_text
+                );
+                format!("解析响应失败: {}", e)
+            })?;
 
         let model_ids: Vec<String> = models_response.data.into_iter().map(|m| m.id).collect();
-        
+
         tracing::info!("[MODEL_SERVICE] OpenAI 成功获取 {} 个模型", model_ids.len());
 
         Ok(model_ids)
@@ -192,7 +201,10 @@ impl ModelService {
             base_url.unwrap_or("https://api.anthropic.com")
         );
 
-        tracing::info!("[MODEL_SERVICE] 请求 Anthropic API 获取模型列表: url={}", url);
+        tracing::info!(
+            "[MODEL_SERVICE] 请求 Anthropic API 获取模型列表: url={}",
+            url
+        );
 
         let response = self
             .client
@@ -212,7 +224,11 @@ impl ModelService {
 
         if !status.is_success() {
             let error_body = response.text().await.unwrap_or_default();
-            tracing::error!("[MODEL_SERVICE] Anthropic HTTP 错误: status={}, body={}", status, error_body);
+            tracing::error!(
+                "[MODEL_SERVICE] Anthropic HTTP 错误: status={}, body={}",
+                status,
+                error_body
+            );
             return Err(format!("HTTP 错误: {}", status));
         }
 
@@ -223,14 +239,22 @@ impl ModelService {
 
         tracing::debug!("[MODEL_SERVICE] Anthropic 响应体: {}", response_text);
 
-        let models_response: ModelsResponse = serde_json::from_str(&response_text).map_err(|e| {
-            tracing::error!("[MODEL_SERVICE] 解析 Anthropic 响应失败: {}, 响应内容: {}", e, response_text);
-            format!("解析响应失败: {}", e)
-        })?;
+        let models_response: ModelsResponse =
+            serde_json::from_str(&response_text).map_err(|e| {
+                tracing::error!(
+                    "[MODEL_SERVICE] 解析 Anthropic 响应失败: {}, 响应内容: {}",
+                    e,
+                    response_text
+                );
+                format!("解析响应失败: {}", e)
+            })?;
 
         let model_ids: Vec<String> = models_response.data.into_iter().map(|m| m.id).collect();
-        
-        tracing::info!("[MODEL_SERVICE] Anthropic 成功获取 {} 个模型", model_ids.len());
+
+        tracing::info!(
+            "[MODEL_SERVICE] Anthropic 成功获取 {} 个模型",
+            model_ids.len()
+        );
 
         Ok(model_ids)
     }
@@ -265,7 +289,11 @@ impl ModelService {
 
         if !status.is_success() {
             let error_body = response.text().await.unwrap_or_default();
-            tracing::error!("[MODEL_SERVICE] Gemini HTTP 错误: status={}, body={}", status, error_body);
+            tracing::error!(
+                "[MODEL_SERVICE] Gemini HTTP 错误: status={}, body={}",
+                status,
+                error_body
+            );
             return Err(format!("HTTP 错误: {}", status));
         }
 
@@ -277,10 +305,15 @@ impl ModelService {
         tracing::debug!("[MODEL_SERVICE] Gemini 响应体: {}", response_text);
 
         // Gemini API 返回格式不同，需要特殊处理
-        let response_json: serde_json::Value = serde_json::from_str(&response_text).map_err(|e| {
-            tracing::error!("[MODEL_SERVICE] 解析 Gemini 响应失败: {}, 响应内容: {}", e, response_text);
-            format!("解析响应失败: {}", e)
-        })?;
+        let response_json: serde_json::Value =
+            serde_json::from_str(&response_text).map_err(|e| {
+                tracing::error!(
+                    "[MODEL_SERVICE] 解析 Gemini 响应失败: {}, 响应内容: {}",
+                    e,
+                    response_text
+                );
+                format!("解析响应失败: {}", e)
+            })?;
 
         let models = response_json
             .get("models")
@@ -348,10 +381,9 @@ impl ModelService {
                 "claude-3-5-sonnet-20241022".to_string(),
                 "claude-3-5-haiku-20241022".to_string(),
             ],
-            PoolProviderType::GeminiApiKey => vec![
-                "gemini-2.5-flash".to_string(),
-                "gemini-2.5-pro".to_string(),
-            ],
+            PoolProviderType::GeminiApiKey => {
+                vec!["gemini-2.5-flash".to_string(), "gemini-2.5-pro".to_string()]
+            }
             _ => vec![],
         }
     }
@@ -389,9 +421,7 @@ impl ModelService {
             .prepare("SELECT supported_models FROM provider_pool_credentials WHERE uuid = ?1")
             .map_err(|e| e.to_string())?;
 
-        let models_json: Option<String> = stmt
-            .query_row([credential_uuid], |row| row.get(0))
-            .ok();
+        let models_json: Option<String> = stmt.query_row([credential_uuid], |row| row.get(0)).ok();
 
         match models_json {
             Some(json) => serde_json::from_str(&json).map_err(|e| e.to_string()),
@@ -436,10 +466,7 @@ impl ModelService {
     pub fn get_all_available_models(&self, db: &DbConnection) -> Result<Vec<String>, String> {
         let models_by_provider = self.get_all_models_by_provider(db)?;
 
-        let mut all_models: Vec<String> = models_by_provider
-            .into_values()
-            .flatten()
-            .collect();
+        let mut all_models: Vec<String> = models_by_provider.into_values().flatten().collect();
 
         all_models.sort();
         all_models.dedup();

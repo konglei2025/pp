@@ -278,10 +278,10 @@ pub fn convert_openai_to_antigravity_with_context(
     eprintln!("[CONVERT] 项目ID: {}", project_id);
     eprintln!("[CONVERT] 消息数量: {}", request.messages.len());
     eprintln!("[CONVERT] 流式: {}", request.stream);
-    
+
     let actual_model = model_mapping(&request.model);
     eprintln!("[CONVERT] 映射后模型: {}", actual_model);
-    
+
     let supports_thinking = model_supports_thinking(actual_model);
     eprintln!("[CONVERT] 支持思维链: {}", supports_thinking);
 
@@ -672,10 +672,13 @@ pub fn convert_openai_to_antigravity_with_context(
         "model": actual_model,
         "userAgent": "antigravity"
     });
-    
-    eprintln!("[CONVERT] 转换后的请求体: {}", serde_json::to_string_pretty(&result).unwrap_or_default());
+
+    eprintln!(
+        "[CONVERT] 转换后的请求体: {}",
+        serde_json::to_string_pretty(&result).unwrap_or_default()
+    );
     eprintln!("========== [CONVERT] OpenAI -> Antigravity 转换完成 ==========");
-    
+
     result
 }
 
