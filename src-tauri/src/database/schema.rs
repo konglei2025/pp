@@ -226,14 +226,16 @@ pub fn create_tables(conn: &Connection) -> Result<(), rusqlite::Error> {
         [],
     );
 
+    // Migration: 添加代理URL字段 - 使用重建表结构的方式
+    // 注意：这个迁移会重建整个表，所以 supported_models 列需要在这之后添加
+    migrate_add_proxy_url_column(conn)?;
+
     // Migration: 添加支持的模型列表字段
+    // 必须在 migrate_add_proxy_url_column 之后执行，因为那个函数可能会重建表
     let _ = conn.execute(
         "ALTER TABLE provider_pool_credentials ADD COLUMN supported_models TEXT",
         [],
     );
-
-    // Migration: 添加代理URL字段 - 使用重建表结构的方式
-    migrate_add_proxy_url_column(conn)?;
 
     // 已安装插件表
     // _需求: 1.2, 1.3_
@@ -625,7 +627,7 @@ fn migrate_add_proxy_url_column(conn: &Connection) -> Result<(), rusqlite::Error
         // 2. 删除原表
         conn.execute("DROP TABLE provider_pool_credentials", [])?;
 
-        // 3. 重建表结构（包含proxy_url列）
+        // 3. 重建表结构（包含proxy_url列和supported_models列）
         conn.execute(
             "CREATE TABLE provider_pool_credentials (
                 uuid TEXT PRIMARY KEY,
@@ -637,6 +639,7 @@ fn migrate_add_proxy_url_column(conn: &Connection) -> Result<(), rusqlite::Error
                 check_health INTEGER DEFAULT 1,
                 check_model_name TEXT,
                 not_supported_models TEXT,
+                supported_models TEXT,
                 usage_count INTEGER DEFAULT 0,
                 error_count INTEGER DEFAULT 0,
                 last_used INTEGER,
@@ -658,11 +661,11 @@ fn migrate_add_proxy_url_column(conn: &Connection) -> Result<(), rusqlite::Error
             [],
         )?;
 
-        // 4. 恢复数据（proxy_url默认为NULL）
+        // 4. 恢复数据（proxy_url和supported_models默认为NULL）
         conn.execute(
             "INSERT INTO provider_pool_credentials (
                 uuid, provider_type, credential_data, name, is_healthy, is_disabled,
-                check_health, check_model_name, not_supported_models, usage_count,
+                check_health, check_model_name, not_supported_models, supported_models, usage_count,
                 error_count, last_used, last_error_time, last_error_message,
                 last_health_check_time, last_health_check_model, proxy_url,
                 created_at, updated_at, cached_access_token, cached_refresh_token,
@@ -670,7 +673,7 @@ fn migrate_add_proxy_url_column(conn: &Connection) -> Result<(), rusqlite::Error
                 last_refresh_error, source
             ) SELECT
                 uuid, provider_type, credential_data, name, is_healthy, is_disabled,
-                check_health, check_model_name, not_supported_models, usage_count,
+                check_health, check_model_name, not_supported_models, NULL as supported_models, usage_count,
                 error_count, last_used, last_error_time, last_error_message,
                 last_health_check_time, last_health_check_model, NULL as proxy_url,
                 created_at, updated_at, cached_access_token, cached_refresh_token,
