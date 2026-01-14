@@ -223,7 +223,7 @@ impl ServerState {
     }
 
     /// 解析绑定地址
-    /// 
+    ///
     /// 直接返回用户配置的地址，不做任何自动替换。
     /// 如果地址无效，绑定时会失败并返回错误。
     fn resolve_bind_host(&self, configured_host: &str) -> String {
@@ -299,7 +299,7 @@ impl ServerState {
         // - 局域网 IP：检查是否在当前网卡列表中，如果不在则自动切换到当前局域网 IP
         let configured_host = self.config.server.host.clone();
         let host = self.resolve_bind_host(&configured_host);
-        
+
         // 如果地址发生了变化，记录日志
         if host != configured_host {
             tracing::warn!(
@@ -308,7 +308,7 @@ impl ServerState {
                 host
             );
         }
-        
+
         let port = self.config.server.port;
         let api_key = self.config.server.api_key.clone();
         let api_key_for_state = api_key.clone(); // 用于保存到 running_api_key
@@ -1051,15 +1051,13 @@ async fn run_server(
     let addr: std::net::SocketAddr = format!("{host}:{port}")
         .parse()
         .map_err(|e| format!("无效的监听地址 {}:{} - {}", host, port, e))?;
-    
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .map_err(|e| {
-            format!(
-                "无法绑定到 {}:{}，错误: {}。请检查地址是否有效或端口是否被占用。",
-                host, port, e
-            )
-        })?;
+
+    let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
+        format!(
+            "无法绑定到 {}:{}，错误: {}。请检查地址是否有效或端口是否被占用。",
+            host, port, e
+        )
+    })?;
 
     tracing::info!("Server listening on {}", addr);
 

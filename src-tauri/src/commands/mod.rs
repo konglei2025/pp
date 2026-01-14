@@ -1,5 +1,6 @@
 pub mod agent_cmd;
 pub mod api_key_provider_cmd;
+pub mod aster_agent_cmd;
 pub mod auto_fix_cmd;
 pub mod browser_interceptor_cmd;
 pub mod config_cmd;

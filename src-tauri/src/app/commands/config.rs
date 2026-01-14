@@ -25,13 +25,18 @@ pub async fn save_config(
 ) -> Result<(), String> {
     let host = config.server.host.to_lowercase();
 
-    tracing::info!("[CONFIG] 保存配置请求: host={}, port={}", host, config.server.port);
+    tracing::info!(
+        "[CONFIG] 保存配置请求: host={}, port={}",
+        host,
+        config.server.port
+    );
 
     // 验证绑定地址
     if !is_valid_bind_host(&host) {
         tracing::warn!("[CONFIG] 无效的监听地址: {}", host);
         return Err(
-            "无效的监听地址。允许的地址：127.0.0.1、localhost、::1、0.0.0.0、:: 或局域网 IP".to_string(),
+            "无效的监听地址。允许的地址：127.0.0.1、localhost、::1、0.0.0.0、:: 或局域网 IP"
+                .to_string(),
         );
     }
 
@@ -43,7 +48,7 @@ pub async fn save_config(
 
     let mut s = state.write().await;
     s.config = config.clone();
-    
+
     match config::save_config(&config) {
         Ok(()) => {
             tracing::info!("[CONFIG] 配置保存成功: host={}", config.server.host);

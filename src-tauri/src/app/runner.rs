@@ -71,6 +71,7 @@ pub fn run() {
         enhanced_stats_service: enhanced_stats_service_state,
         batch_operations: batch_operations_state,
         native_agent: native_agent_state,
+        aster_agent: aster_agent_state,
         oauth_plugin_manager: oauth_plugin_manager_state,
         orchestrator: orchestrator_state,
         connect_state,
@@ -153,6 +154,7 @@ pub fn run() {
         .manage(enhanced_stats_service_state)
         .manage(batch_operations_state)
         .manage(native_agent_state)
+        .manage(aster_agent_state)
         .manage(oauth_plugin_manager_state)
         .manage(orchestrator_state)
         .manage(connect_state)
@@ -883,6 +885,7 @@ pub fn run() {
             commands::plugin_cmd::get_plugins_with_ui,
             commands::plugin_cmd::read_plugin_manifest_cmd,
             commands::plugin_cmd::launch_plugin_ui,
+            commands::plugin_cmd::frontend_debug_log,
             // Plugin RPC commands
             commands::plugin_rpc_cmd::plugin_rpc_connect,
             commands::plugin_rpc_cmd::plugin_rpc_disconnect,
@@ -1072,6 +1075,16 @@ pub fn run() {
             commands::native_agent_cmd::native_agent_get_session,
             commands::native_agent_cmd::native_agent_delete_session,
             commands::native_agent_cmd::native_agent_list_sessions,
+            // Aster Agent commands
+            commands::aster_agent_cmd::aster_agent_init,
+            commands::aster_agent_cmd::aster_agent_status,
+            commands::aster_agent_cmd::aster_agent_configure_provider,
+            commands::aster_agent_cmd::aster_agent_chat_stream,
+            commands::aster_agent_cmd::aster_agent_stop,
+            commands::aster_agent_cmd::aster_session_create,
+            commands::aster_agent_cmd::aster_session_list,
+            commands::aster_agent_cmd::aster_session_get,
+            commands::aster_agent_cmd::aster_agent_confirm,
             // Models config commands
             commands::models_cmd::get_models_config,
             commands::models_cmd::save_models_config,

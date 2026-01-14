@@ -1,6 +1,6 @@
 [package]
 name = "proxycast"
-version = "0.45.2"
+version = "0.46.0"
 description = "AI API Proxy Desktop App"
 authors = ["you"]
 edition = "2021"
@@ -76,6 +76,10 @@ whoami = "1"
 mouse_position = "0.1.4"
 window-vibrancy = "0.7.1"
 if-addrs = "0.13"
+
+# Aster Agent Framework
+# 使用本地路径进行开发，后续切换到 git
+aster = { path = "../../../astercloud/aster-rust/crates/aster" }
 
 # Platform specific dependencies for browser interceptor
 

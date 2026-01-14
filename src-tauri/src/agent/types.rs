@@ -116,6 +116,10 @@ pub struct AgentMessage {
     /// 工具调用 ID（tool 角色消息需要）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+    /// 推理内容（DeepSeek R1 等模型的思维链内容）
+    /// DeepSeek Reasoner 在 Tool Calls 场景下要求此字段
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
 }
 
 /// 消息内容类型
@@ -468,6 +472,9 @@ pub struct StreamResult {
     /// Token 使用量
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<TokenUsage>,
+    /// 推理内容（DeepSeek R1 等模型的思维链内容）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
 }
 
 impl StreamResult {
@@ -477,6 +484,7 @@ impl StreamResult {
             content,
             tool_calls: None,
             usage: None,
+            reasoning_content: None,
         }
     }
 
@@ -489,6 +497,12 @@ impl StreamResult {
     /// 设置 token 使用量
     pub fn with_usage(mut self, usage: TokenUsage) -> Self {
         self.usage = Some(usage);
+        self
+    }
+
+    /// 设置推理内容
+    pub fn with_reasoning_content(mut self, reasoning_content: String) -> Self {
+        self.reasoning_content = Some(reasoning_content);
         self
     }
 

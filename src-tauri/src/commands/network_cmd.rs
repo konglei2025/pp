@@ -42,7 +42,7 @@ fn get_local_ip() -> Option<String> {
     socket.connect("8.8.8.8:80").ok()?;
     let local_addr = socket.local_addr().ok()?;
     let ip_str = local_addr.ip().to_string();
-    
+
     // 检查是否是 VPN 地址 (198.18.x.x)
     if let IpAddr::V4(ipv4) = local_addr.ip() {
         if ipv4.octets()[0] == 198 && (ipv4.octets()[1] == 18 || ipv4.octets()[1] == 19) {
@@ -60,7 +60,7 @@ fn get_local_ip() -> Option<String> {
             return Some("127.0.0.1".to_string());
         }
     }
-    
+
     Some(ip_str)
 }
 
@@ -107,7 +107,6 @@ fn get_all_local_ips() -> Vec<String> {
 
     ips
 }
-
 
 /// 根据监听地址生成可访问的 URL
 ///

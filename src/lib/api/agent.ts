@@ -498,6 +498,154 @@ export async function listGooseProviders(): Promise<GooseProviderInfo[]> {
 }
 
 // ============================================================
+// Aster Agent API (基于 Aster 框架的 Agent 实现)
+// ============================================================
+
+/**
+ * Aster Agent 状态
+ */
+export interface AsterAgentStatus {
+  initialized: boolean;
+  provider_configured: boolean;
+  provider_name?: string;
+  model_name?: string;
+}
+
+/**
+ * Aster Provider 配置
+ */
+export interface AsterProviderConfig {
+  provider_name: string;
+  model_name: string;
+  api_key?: string;
+  base_url?: string;
+}
+
+/**
+ * Aster 会话信息
+ */
+export interface AsterSessionInfo {
+  id: string;
+  name?: string;
+  created_at: string;
+  updated_at: string;
+  messages_count: number;
+}
+
+/**
+ * Aster 会话详情
+ */
+export interface AsterSessionDetail {
+  id: string;
+  name?: string;
+  messages: Array<{
+    role: string;
+    content: string;
+    timestamp: string;
+  }>;
+}
+
+/**
+ * 初始化 Aster Agent
+ */
+export async function initAsterAgent(): Promise<AsterAgentStatus> {
+  return await safeInvoke("aster_agent_init");
+}
+
+/**
+ * 获取 Aster Agent 状态
+ */
+export async function getAsterAgentStatus(): Promise<AsterAgentStatus> {
+  return await safeInvoke("aster_agent_status");
+}
+
+/**
+ * 配置 Aster Agent 的 Provider
+ */
+export async function configureAsterProvider(
+  config: AsterProviderConfig,
+  sessionId: string,
+): Promise<AsterAgentStatus> {
+  return await safeInvoke("aster_agent_configure_provider", {
+    request: config,
+    session_id: sessionId,
+  });
+}
+
+/**
+ * 发送消息到 Aster Agent (流式响应)
+ *
+ * 通过 Tauri 事件接收响应流
+ */
+export async function sendAsterMessageStream(
+  message: string,
+  sessionId: string,
+  eventName: string,
+  images?: ImageInput[],
+  providerConfig?: AsterProviderConfig,
+): Promise<void> {
+  return await safeInvoke("aster_agent_chat_stream", {
+    request: {
+      message,
+      session_id: sessionId,
+      event_name: eventName,
+      images,
+      provider_config: providerConfig,
+    },
+  });
+}
+
+/**
+ * 停止 Aster Agent 会话
+ */
+export async function stopAsterSession(sessionId: string): Promise<boolean> {
+  return await safeInvoke("aster_agent_stop", { sessionId });
+}
+
+/**
+ * 创建 Aster 会话
+ */
+export async function createAsterSession(
+  workingDir?: string,
+  name?: string,
+): Promise<string> {
+  return await safeInvoke("aster_session_create", { workingDir, name });
+}
+
+/**
+ * 获取 Aster 会话列表
+ */
+export async function listAsterSessions(): Promise<AsterSessionInfo[]> {
+  return await safeInvoke("aster_session_list");
+}
+
+/**
+ * 获取 Aster 会话详情
+ */
+export async function getAsterSession(
+  sessionId: string,
+): Promise<AsterSessionDetail> {
+  return await safeInvoke("aster_session_get", { sessionId });
+}
+
+/**
+ * 确认 Aster Agent 权限请求
+ */
+export async function confirmAsterAction(
+  requestId: string,
+  confirmed: boolean,
+  response?: string,
+): Promise<void> {
+  return await safeInvoke("aster_agent_confirm", {
+    request: {
+      request_id: requestId,
+      confirmed,
+      response,
+    },
+  });
+}
+
+// ============================================================
 // Terminal Tool API (终端命令执行)
 // ============================================================
 

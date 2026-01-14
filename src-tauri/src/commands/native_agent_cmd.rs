@@ -267,6 +267,7 @@ pub async fn native_agent_chat_stream(
             timestamp: chrono::Utc::now().to_rfc3339(),
             tool_calls: None,
             tool_call_id: None,
+            reasoning_content: None,
         };
         if let Err(e) = AgentDao::add_message(&conn, sid, &user_message) {
             tracing::warn!("[NativeAgent] 保存用户消息到数据库失败: {}", e);
@@ -368,6 +369,7 @@ pub async fn native_agent_chat_stream(
                                 timestamp: chrono::Utc::now().to_rfc3339(),
                                 tool_calls: None,
                                 tool_call_id: None,
+                                reasoning_content: None,
                             };
                             if let Err(e) = AgentDao::add_message(&conn, sid, &assistant_message) {
                                 tracing::warn!("[NativeAgent] 保存助手消息到数据库失败: {}", e);

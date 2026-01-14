@@ -5,6 +5,7 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::agent::AsterAgentState;
 use crate::agent::NativeAgentState;
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
 use crate::commands::connect_cmd::ConnectStateWrapper;
@@ -134,6 +135,7 @@ pub struct AppStates {
     pub enhanced_stats_service: EnhancedStatsServiceState,
     pub batch_operations: BatchOperationsState,
     pub native_agent: NativeAgentState,
+    pub aster_agent: AsterAgentState,
     pub oauth_plugin_manager: crate::commands::oauth_plugin_cmd::OAuthPluginManagerState,
     pub orchestrator: OrchestratorState,
     pub connect_state: ConnectStateWrapper,
@@ -213,6 +215,7 @@ pub fn init_states(config: &Config) -> Result<AppStates, String> {
 
     // 其他状态
     let native_agent_state = NativeAgentState::new();
+    let aster_agent_state = AsterAgentState::new();
     let oauth_plugin_manager_state =
         crate::commands::oauth_plugin_cmd::OAuthPluginManagerState::with_defaults();
     let orchestrator_state = OrchestratorState::new();
@@ -275,6 +278,7 @@ pub fn init_states(config: &Config) -> Result<AppStates, String> {
         enhanced_stats_service: enhanced_stats_service_state,
         batch_operations: batch_operations_state,
         native_agent: native_agent_state,
+        aster_agent: aster_agent_state,
         oauth_plugin_manager: oauth_plugin_manager_state,
         orchestrator: orchestrator_state,
         connect_state,

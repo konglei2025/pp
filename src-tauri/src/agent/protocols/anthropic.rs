@@ -359,6 +359,7 @@ impl AnthropicProtocol {
                                 content: full_content,
                                 tool_calls,
                                 usage,
+                                reasoning_content: None,
                             });
                         }
                     }
@@ -396,6 +397,7 @@ impl AnthropicProtocol {
             content: full_content,
             tool_calls,
             usage,
+            reasoning_content: None,
         })
     }
 }
