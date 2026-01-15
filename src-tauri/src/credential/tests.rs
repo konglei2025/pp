@@ -17,7 +17,6 @@ fn arb_provider_type() -> impl Strategy<Value = ProviderType> {
     prop_oneof![
         Just(ProviderType::Kiro),
         Just(ProviderType::Gemini),
-        Just(ProviderType::Qwen),
         Just(ProviderType::OpenAI),
         Just(ProviderType::Claude),
     ]
@@ -698,7 +697,6 @@ fn arb_sync_provider_type() -> impl Strategy<Value = PoolProviderType> {
     prop_oneof![
         Just(PoolProviderType::Kiro),
         Just(PoolProviderType::Gemini),
-        Just(PoolProviderType::Qwen),
         Just(PoolProviderType::OpenAI),
         Just(PoolProviderType::Claude),
     ]

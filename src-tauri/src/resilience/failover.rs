@@ -490,7 +490,11 @@ mod unit_tests {
     #[test]
     fn test_handle_failure_quota_exceeded() {
         let failover = Failover::with_defaults();
-        let available = vec![ProviderType::Kiro, ProviderType::Gemini, ProviderType::Qwen];
+        let available = vec![
+            ProviderType::Kiro,
+            ProviderType::Gemini,
+            ProviderType::OpenAI,
+        ];
 
         let result = failover.handle_failure(
             ProviderType::Kiro,
@@ -569,7 +573,11 @@ mod unit_tests {
     #[test]
     fn test_select_alternative() {
         let failover = Failover::with_defaults();
-        let available = vec![ProviderType::Kiro, ProviderType::Gemini, ProviderType::Qwen];
+        let available = vec![
+            ProviderType::Kiro,
+            ProviderType::Gemini,
+            ProviderType::OpenAI,
+        ];
 
         // 排除 Kiro，应该选择 Gemini
         let result = failover.select_alternative(ProviderType::Kiro, &available);
@@ -583,14 +591,18 @@ mod unit_tests {
     #[test]
     fn test_select_alternative_excluding() {
         let failover = Failover::with_defaults();
-        let available = vec![ProviderType::Kiro, ProviderType::Gemini, ProviderType::Qwen];
+        let available = vec![
+            ProviderType::Kiro,
+            ProviderType::Gemini,
+            ProviderType::OpenAI,
+        ];
 
         let mut excluded = HashSet::new();
         excluded.insert(ProviderType::Kiro);
         excluded.insert(ProviderType::Gemini);
 
         let result = failover.select_alternative_excluding(&excluded, &available);
-        assert_eq!(result, Some(ProviderType::Qwen));
+        assert_eq!(result, Some(ProviderType::OpenAI));
     }
 
     #[test]
@@ -638,7 +650,11 @@ mod manager_tests {
     #[test]
     fn test_failover_manager_tracks_failed_providers() {
         let mut manager = FailoverManager::with_defaults();
-        let available = vec![ProviderType::Kiro, ProviderType::Gemini, ProviderType::Qwen];
+        let available = vec![
+            ProviderType::Kiro,
+            ProviderType::Gemini,
+            ProviderType::OpenAI,
+        ];
 
         // 第一次失败
         let result = manager.handle_failure_and_switch(
@@ -659,12 +675,12 @@ mod manager_tests {
             &available,
         );
         assert!(result.switched);
-        assert_eq!(result.new_provider, Some(ProviderType::Qwen));
+        assert_eq!(result.new_provider, Some(ProviderType::OpenAI));
         assert!(manager.is_provider_failed(ProviderType::Gemini));
 
         // 第三次失败（所有 Provider 都失败了）
         let result = manager.handle_failure_and_switch(
-            ProviderType::Qwen,
+            ProviderType::OpenAI,
             Some(429),
             "Rate limit",
             &available,
@@ -676,7 +692,11 @@ mod manager_tests {
     #[test]
     fn test_failover_manager_switch_log() {
         let mut manager = FailoverManager::with_defaults();
-        let available = vec![ProviderType::Kiro, ProviderType::Gemini, ProviderType::Qwen];
+        let available = vec![
+            ProviderType::Kiro,
+            ProviderType::Gemini,
+            ProviderType::OpenAI,
+        ];
 
         // 触发两次切换
         manager.handle_failure_and_switch(ProviderType::Kiro, Some(429), "Rate limit", &available);
@@ -695,7 +715,7 @@ mod manager_tests {
         assert_eq!(log[0].failure_type, FailureType::QuotaExceeded);
 
         assert_eq!(log[1].from_provider, ProviderType::Gemini);
-        assert_eq!(log[1].to_provider, ProviderType::Qwen);
+        assert_eq!(log[1].to_provider, ProviderType::OpenAI);
         assert_eq!(log[1].failure_type, FailureType::ServiceUnavailable);
     }
 
