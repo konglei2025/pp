@@ -1,0 +1,1 @@
+export { ConfigManagementPage } from "./ConfigManagementPage";
