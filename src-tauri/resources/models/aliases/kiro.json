@@ -21,7 +21,7 @@
       "provider": "anthropic",
       "description": "Claude Opus 4.5 via Kiro"
     },
-    "claude-opus-4-6": {
+    "claude-opus-4-5-666": {
       "actual": "claude-opus-4-5-20251101",
       "internal_name": "CLAUDE_OPUS_4_5_20251101_V1_0",
       "provider": "anthropic",
